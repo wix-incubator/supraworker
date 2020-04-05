@@ -27,13 +27,14 @@ deploy:
   provider: releases
   api_key: $GITHUB_TOKEN  # Set in the settings page of your repository, as a secure variable
   file:
-    - $RELEASES_PATH/snapshot/golog-tools_windows_386.zip
-    - $RELEASES_PATH/snapshot/golog-tools_windows_amd64.zip
-    - $RELEASES_PATH/snapshot/golog-tools_darwin_386.zip
-    - $RELEASES_PATH/snapshot/golog-tools_darwin_amd64.zip
-    - $RELEASES_PATH/snapshot/golog-tools_linux_386.tar.gz
-    - $RELEASES_PATH/snapshot/golog-tools_linux_amd64.tar.gz
-    - $RELEASES_PATH/snapshot/golog-tools_linux_arm.tar.gz
+    - $RELEASES_PATH/snapshot/supraworker_windows_386.zip
+    - $RELEASES_PATH/snapshot/supraworker_windows_amd64.zip
+    - $RELEASES_PATH/snapshot/supraworker_darwin_386.zip
+    - $RELEASES_PATH/snapshot/supraworker_darwin_amd64.zip
+    - $RELEASES_PATH/snapshot/supraworker_linux_386.tar.gz
+    - $RELEASES_PATH/snapshot/supraworker_linux_amd64.tar.gz
+    - $RELEASES_PATH/snapshot/supraworker_linux_arm.tar.gz
+
   on:
     repo: weldpua2008/supraworker
     tags: true

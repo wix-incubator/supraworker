@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 // Package config provides configuration for `supraworker` application.
-
 package config
 
 import (
@@ -17,11 +16,11 @@ import (
 )
 
 const (
-	// Project name
+	// ProjectName defines project name
 	ProjectName = "supraworker"
 )
 
-// top level Configuration structure
+// Config is top level Configuration structure
 type Config struct {
 	// Indentification for the process
 	ClientId string `mapstructure:"clientId"`
@@ -35,6 +34,7 @@ type Config struct {
 	ConfigVersion string `mapstructure:"version"`
 }
 
+// ApiOperations is defines operations structure
 type ApiOperations struct {
 	Run         UrlConf `mapstructure:"run"`         // defines how to run item
 	Cancelation UrlConf `mapstructure:"cancelation"` // defines how to cancel item
@@ -51,6 +51,7 @@ type ApiOperations struct {
 
 }
 
+// UrlConf defines all params for request.
 type UrlConf struct {
 	Url             string            `mapstructure:"url"`
 	Method          string            `mapstructure:"method"`
@@ -60,9 +61,12 @@ type UrlConf struct {
 }
 
 var (
-	CfgFile  string
+	// CfgFile defines Path to the config
+	CfgFile string
+	// ClientId defines Indentification for the instance.
 	ClientId string
-	C        Config = Config{
+	// C defines main configuration structure.
+	C Config = Config{
 		CallAPIDelaySec: int(2),
 
 		// JobsAPI: UrlConf{

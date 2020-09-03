@@ -58,7 +58,11 @@ func TestHeartBeatApi(t *testing.T) {
 	if err := viper.ReadConfig(bytes.NewBuffer(yamlExample)); err != nil {
 		t.Errorf("Can't read config: %v\n", err)
 	}
-	go StartHeartBeat(ctx, 100*time.Millisecond)
+	go func() {
+		if err := StartHeartBeat(ctx, 100*time.Millisecond); err != nil {
+			log.Warnf("StartHeartBeat returned error %v", err)
+		}
+	}()
 
 	select {
 	case <-notifyStdoutSent:

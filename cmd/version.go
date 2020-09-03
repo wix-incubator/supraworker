@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // license that can be found in the LICENSE file.
 
+// Package cmd defines commaqnd tools.
 // Version tools for Supraworker
 package cmd
 
@@ -16,19 +17,19 @@ func init() {
 	rootCmd.SetVersionTemplate(`{{.Version}}{{printf "\n" }}`)
 }
 
-// The git commit that was compiled. This will be filled in by the compiler.
+// GitCommit defines the git commit that was used at runtime. This will be filled in by the compiler.
 var GitCommit string
 
 const (
-	// The main version number
-	Version = "0.1.1"
+	// Version defines main version number
+	Version = "0.1.2"
 
-	// A pre-release marker for the version
+	// VersionPrerelease is pre-release marker for the version
 	// such as "dev" (in development), "beta", "rc1", etc.
 	VersionPrerelease = "dev"
 )
 
-// Return formatted version as string
+// FormattedVersion returns formatted version as string.
 func FormattedVersion() string {
 	var versionString bytes.Buffer
 	fmt.Fprintf(&versionString, "Supraworker v")

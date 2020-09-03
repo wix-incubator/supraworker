@@ -2,24 +2,21 @@ package model
 
 import (
 	"github.com/sirupsen/logrus"
-	"os"
 	"os/exec"
 )
 
 var (
-	osGetEnv           = os.Getenv
 	execCommandContext = exec.CommandContext
-
-	// URL for pulling new jobs
+	// FetchNewJobAPIURL is URL for pulling new jobs
 	FetchNewJobAPIURL string
-	// Http METHOD for fetch Jobs API
+	// FetchNewJobAPIMethod is Http METHOD for fetch Jobs API
 	FetchNewJobAPIMethod = "POST"
-	// Is used in eqch requesto for a new job
+	// FetchNewJobAPIParams is used in eqch requesto for a new job
 	FetchNewJobAPIParams = make(map[string]string)
 
-	// URL for uploading log steams
+	// StreamingAPIURL is URL for uploading log steams
 	StreamingAPIURL string
-	// Http METHOD for streaming log API
+	// StreamingAPIMethod is Http METHOD for streaming log API
 	StreamingAPIMethod = "POST"
 
 	log           = logrus.WithFields(logrus.Fields{"package": "model"})

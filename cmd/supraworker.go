@@ -6,20 +6,16 @@
 package cmd
 
 import (
-	"fmt"
+	"context"
 	"github.com/fsnotify/fsnotify"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-
-	"time"
-	// "strings"
-	// "bytes"
-	"context"
-	"github.com/sirupsen/logrus"
 	config "github.com/weldpua2008/supraworker/config"
 	job "github.com/weldpua2008/supraworker/job"
 	model "github.com/weldpua2008/supraworker/model"
 	worker "github.com/weldpua2008/supraworker/worker"
+	"time"
 	// "html/template"
 	"os"
 	"os/signal"
@@ -69,10 +65,10 @@ var rootCmd = &cobra.Command{
 		defer cancel() // cancel when we are getting the kill signal or exit
 		var wg sync.WaitGroup
 		jobs := make(chan *model.Job, 1)
-		log.Info(fmt.Sprintf("Starting Supraworker"))
+		log.Infof("Starting Supraworker\n")
 		go func() {
 			sig := <-sigs
-			log.Info(fmt.Sprintf("Shutting down - got %v signal", sig))
+			log.Infof("Shutting down - got %v signal", sig)
 			cancel()
 			shutchan <- true
 		}()
@@ -89,20 +85,32 @@ var rootCmd = &cobra.Command{
 			delay = 1
 		}
 
-		api_delay_sec := time.Duration(delay) * time.Second
+		apiCallDelaySeconds := time.Duration(delay) * time.Second
 
 		// load config
-		model.ReinitializeConfig()
+		if errCnf := model.ReinitializeConfig(); errCnf != nil {
+			log.Tracef("Failed ReinitializeConfig %v\n", errCnf)
+		}
 		config.ReinitializeConfig()
 		viper.WatchConfig()
 		viper.OnConfigChange(func(e fsnotify.Event) {
 			log.Trace("Config file changed:", e.Name)
-			model.ReinitializeConfig()
+			if errCnf := model.ReinitializeConfig(); errCnf != nil {
+				log.Tracef("Failed model.ReinitializeConfig %v\n", errCnf)
+			}
 			config.ReinitializeConfig()
 		})
+		go func() {
+			if err := job.StartGenerateJobs(ctx, jobs, apiCallDelaySeconds); err != nil {
+				log.Tracef("StartGenerateJobs returned error %v", err)
+			}
+		}()
 
-		go job.StartGenerateJobs(jobs, ctx, api_delay_sec)
-		go model.StartHeartBeat(ctx, api_delay_sec)
+		go func() {
+			if err := model.StartHeartBeat(ctx, apiCallDelaySeconds); err != nil {
+				log.Tracef("StartGenerateJobs returned error %v", err)
+			}
+		}()
 		for w := 1; w <= numWorkers; w++ {
 			wg.Add(1)
 			go worker.StartWorker(w, jobs, &wg)

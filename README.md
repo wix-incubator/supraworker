@@ -1,4 +1,5 @@
-# Supraworker [![Build Status](https://travis-ci.org/weldpua2008/supraworker.svg?branch=master)](https://travis-ci.org/weldpua2008/supraworker) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+# Supraworker
+[![Build Status](https://travis-ci.org/weldpua2008/supraworker.svg?branch=master)](https://travis-ci.org/weldpua2008/supraworker) ![GitHub All Releases](https://img.shields.io/github/downloads/weldpua2008/supraworker/total) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Go Report Card](https://goreportcard.com/badge/github.com/weldpua2008/supraworker)](https://goreportcard.com/report/github.com/weldpua2008/supraworker) [![Docker Pulls](https://img.shields.io/docker/pulls/weldpua2008/supraworker)](https://hub.docker.com/r/weldpua2008/supraworker) ![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/weldpua2008/supraworker?label=docker%20image)
 
 The abstraction layer around jobs, allows pull a job from your API periodically, call-back your API, observe execution time and to control concurrent execution.
 
@@ -6,9 +7,20 @@ It's responsible for getting the commands from your API, running commands, and s
 
 ## Getting started
 
+Find the version you wish to install on the [GitHub Releases
+page](https://github.com/weldpua2008/supraworker/releases) and download either the
+`darwin-amd64` binary for MacOS or the `linux-amd64` binary for Linux. No other
+operating systems or architectures have pre-built binaries at this time.
+
+>[!WARNING] Running releasses on MacOs:
+> You need to download file, extract it and remove attributes with
+> the following command (where /Users/weldpua2008/Downloads/supraworker_darwin_amd64/supraworker is path to the file)
 ```bash
-$ go get github.com/weldpua2008/supraworker
+$ xattr -d com.apple.quarantine /Users/weldpua2008/Downloads/supraworker_darwin_amd64/supraworker
+$ /Users/weldpua2008/Downloads/supraworker_darwin_amd64/supraworker
 ```
+
+### Configuring
 
 Define config at `$HOME/supraworker.yaml`:
 
@@ -20,15 +32,11 @@ Define config at `$HOME/supraworker.yaml`:
 
 
 ```yaml
+# ClientId in case you need to identify the worker
 clientId: "my_uniq_client_id"
-logs:
-  update:
-    url: "http://localhost/streamlogger/api/v1/logs/upload"
-    method: POST
-
-logs:
-  update:
-    method: GET
+# how ofen call your API
+api_delay_sec: 10
+# jobs related operations
 jobs:
   get:
     url: "http://localhost:80/get/new/job"
@@ -41,7 +49,26 @@ jobs:
 ```
 
 
+## Installing
 
+### Download automation
+* Download for Linux latest release
+```bash
+curl --silent -L  "https://api.github.com/repos/weldpua2008/supraworker/releases/latest"  \
+| jq --arg PLATFORM_ARCH "$(echo `uname -s`_amd| tr '[:upper:]' '[:lower:]')" -r '.assets[] | select(.name | contains($PLATFORM_ARCH)).browser_download_url' \
+| xargs -I % curl -sSL  % \
+| sudo tar --strip-components=1  -xzf  -
+```
+
+### Installing from source
+
+1. install [Go](http://golang.org) `v1.12+`
+1. clone this down into your `$GOPATH`
+  * `mkdir -p $GOPATH/src/github.com/weldpua2008`
+  * `git clone https://github.com/weldpua2008/supraworker $GOPATH/src/github.com/weldpua2008/supraworker`
+  * `cd $GOPATH/src/github.com/weldpua2008/supraworker`
+1. install [golangci-lint](https://github.com/golangci/golangci-lint#install) for linting + static analysis
+  * Lint: `docker run --rm -v $(pwd):/app -w /app golangci/golangci-lint:v1.24.0 golangci-lint run -v`
 ### Running tests
 
 *  expires all test results
@@ -54,25 +81,3 @@ $ go clean -testcache
 ```bash
 $ go test -bench= -test.v  ./...
 ```
-
-## Installing
-
-### from binary
-
-Find the version you wish to install on the [GitHub Releases
-page](https://github.com/weldpua2008/supraworker/releases) and download either the
-`darwin-amd64` binary for macOS or the `linux-amd64` binary for Linux. No other
-operating systems or architectures have pre-built binaries at this time.
-
-### from source
-
-1. install [Go](http://golang.org) `v1.12+`
-1. clone this down into your `$GOPATH`
-  * `mkdir -p $GOPATH/src/github.com/weldpua2008`
-  * `git clone https://github.com/weldpua2008/supraworker $GOPATH/src/github.com/weldpua2008/supraworker`
-  * `cd $GOPATH/src/github.com/weldpua2008/supraworker`
-1. install [gometalinter](https://github.com/alecthomas/gometalinter):
-  * `go get -u github.com/alecthomas/gometalinter`
-  * `gometalinter --install`
-1. install [shellcheck](https://github.com/koalaman/shellcheck)
-1. `make`

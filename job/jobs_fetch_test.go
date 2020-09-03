@@ -73,9 +73,9 @@ func TestGenerateJobs(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(js)
-		// w.WriteHeader(200)
-
+		if _, errWrite := w.Write(js); errWrite != nil {
+			t.Errorf("Can't w.Write %v due %v\n", js, err)
+		}
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			t.Errorf("ReadAll %s", err)
@@ -99,7 +99,7 @@ func TestGenerateJobs(t *testing.T) {
         method: POST
     `)
 
-	viper.ReadConfig(bytes.NewBuffer(yamlExample))
+	_ = viper.ReadConfig(bytes.NewBuffer(yamlExample))
 
 	model.FetchNewJobAPIURL = srv.URL
 	log.Trace(fmt.Sprintf("model.FetchNewJobAPIURL  %s", model.FetchNewJobAPIURL))
@@ -107,8 +107,11 @@ func TestGenerateJobs(t *testing.T) {
 	defer cancel() // cancel when we are getting the kill signal or exit
 	jobs := make(chan *model.Job, 1)
 
-	go StartGenerateJobs(jobs, ctx, time.Duration(5)*time.Second)
-
+	go func() {
+		if err := StartGenerateJobs(ctx, jobs, time.Duration(5)*time.Second); err != nil {
+			log.Infof("StartGenerateJobs failed %v", err)
+		}
+	}()
 	for job := range jobs {
 		if job.Status != model.JOB_STATUS_PENDING {
 			t.Errorf("Expected %s, got %s", model.JOB_STATUS_PENDING, job.Status)

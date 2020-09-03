@@ -38,14 +38,14 @@ func GetParamsFromSection(stage string, param string) map[string]string {
 	c := make(map[string]string)
 	params := viper.GetStringMapString(fmt.Sprintf("%s.%s", stage, param))
 	for k, v := range params {
-		var tpl_bytes bytes.Buffer
+		var tplBytes bytes.Buffer
 		tpl := template.Must(template.New("params").Parse(v))
-		err := tpl.Execute(&tpl_bytes, config.C)
+		err := tpl.Execute(&tplBytes, config.C)
 		if err != nil {
 			log.Tracef("params executing template: %s", err)
 			continue
 		}
-		c[k] = tpl_bytes.String()
+		c[k] = tplBytes.String()
 	}
 	return c
 }
@@ -66,14 +66,14 @@ func GetSliceParamsFromSection(stage string, param string) []string {
 	c := make([]string, 0)
 	params := viper.GetStringSlice(fmt.Sprintf("%s.%s", stage, param))
 	for _, v := range params {
-		var tpl_bytes bytes.Buffer
+		var tplBytes bytes.Buffer
 		tpl := template.Must(template.New("params").Parse(v))
-		err := tpl.Execute(&tpl_bytes, config.C)
+		err := tpl.Execute(&tplBytes, config.C)
 		if err != nil {
 			log.Tracef("params executing template: %s", err)
 			continue
 		}
-		c = append(c, tpl_bytes.String())
+		c = append(c, tplBytes.String())
 	}
 	return c
 }
@@ -133,7 +133,7 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 
 }
 
-// GetNewJobs fetch from your API the jobs for execution
+// NewRemoteApiRequest perform request to API.
 func NewRemoteApiRequest(ctx context.Context, section string, method string, url string) (error, []map[string]interface{}) {
 	var rawResponseArray []map[string]interface{}
 	var rawResponse map[string]interface{}
@@ -141,25 +141,28 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 	t := viper.GetStringMapString(section)
 	c := make(map[string]string)
 	for k, v := range t {
-		var tpl_bytes bytes.Buffer
+		var tplBytes bytes.Buffer
 		tpl := template.Must(template.New("params").Parse(v))
-		err := tpl.Execute(&tpl_bytes, config.C)
+		err := tpl.Execute(&tplBytes, config.C)
 		if err != nil {
 			log.Warn("executing template:", err)
 		}
-		c[k] = tpl_bytes.String()
+		c[k] = tplBytes.String()
 	}
 	var req *http.Request
 	var err error
 	if len(c) > 0 {
-		jsonStr, err := json.Marshal(&c)
+		jsonStr, errMarsh := json.Marshal(&c)
 
-		if err != nil {
-			return fmt.Errorf("Failed to marshal request due %s", err), nil
+		if errMarsh != nil {
+			return fmt.Errorf("Failed to marshal request due %s", errMarsh), nil
 		}
 		req, err = http.NewRequest(method, url, bytes.NewBuffer(jsonStr))
 	} else {
 		req, err = http.NewRequest(method, url, nil)
+	}
+	if err != nil {
+		return fmt.Errorf("Failed to create new request due %s", err), nil
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")

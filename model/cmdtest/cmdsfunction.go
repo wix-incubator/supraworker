@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	log           = logrus.WithFields(logrus.Fields{"package": "model"})
+	// log           = logrus.WithFields(logrus.Fields{"package": "model"})
 	previousLevel logrus.Level
 )
 
@@ -23,7 +23,7 @@ func init() {
 	previousLevel = logrus.GetLevel()
 }
 
-// startTrace logs
+// StartTrace logs.
 // works like this in tests:
 // startTrace()
 // defer restoreLevel()
@@ -36,13 +36,14 @@ func StartTrace() {
 
 }
 
-// restore default logLevel
+// RestoreLevel restore default logLevel.
 func RestoreLevel() {
 	logrus.SetLevel(previousLevel)
 }
 
 type execFunc func(command string, args ...string) *exec.Cmd
 
+// GetFakeExecCommand returns wrapper for the exec.Cmd.
 func GetFakeExecCommand(validator func(string, ...string)) execFunc {
 	return func(command string, args ...string) *exec.Cmd {
 		validator(command, args...)
@@ -50,6 +51,7 @@ func GetFakeExecCommand(validator func(string, ...string)) execFunc {
 	}
 }
 
+// FakeExecCommand returns wrapped exec.Cmd for tests.
 func FakeExecCommand(command string, args ...string) *exec.Cmd {
 	cs := []string{"-test.run=TestHelperProcess", "--", command}
 	cs = append(cs, args...)
@@ -58,6 +60,7 @@ func FakeExecCommand(command string, args ...string) *exec.Cmd {
 	return cmd
 }
 
+// FakeExecCommandContext returns wrapped exec.Cmd for tests.
 func FakeExecCommandContext(ctx context.Context, command string, args ...string) *exec.Cmd {
 	cs := []string{"-test.run=TestHelperProcess", "--", command}
 	cs = append(cs, args...)
@@ -66,18 +69,18 @@ func FakeExecCommandContext(ctx context.Context, command string, args ...string)
 	return cmd
 }
 
-// CMDForTest returns warpped cmd
+// CMDForTest returns warpped cmd.
 func CMDForTest(cmd string) string {
 	return fmt.Sprintf("%s -test.run=TestHelperProcess -- '%s'", os.Args[0], cmd)
 }
 
-// CMDWapBashForTest returns warpped cmd
+// CMDWapBashForTest returns warpped cmd.
 func CMDWapBashForTest(cmd string) string {
 	return fmt.Sprintf("%s -test.run=TestHelperProcess -- bash -c '%s'", os.Args[0], cmd)
 }
 
 // TestHelperProcess used for catch any command and mock the result
-// By default we expect `GO_WANT_HELPER_PROCESS` enviroment variable
+// By default we expect `GO_WANT_HELPER_PROCESS` environment variable
 // We will print any word after `echo`
 // Control exit code:
 // - by providing exit 0
@@ -99,7 +102,7 @@ func TestHelperProcess(t *testing.T) {
 
 	re := regexp.MustCompile(`echo (.+?)`)
 	// Handle the case where args[0] is dir:...
-	// TODO: Futher Validation
+	// TODO: Further Validation
 	// if !strings.Contains(strings.Join(args, " "), "bash") {
 	// 	fmt.Fprintf(os.Stderr, "Expected command to be 'bash'. Got: '%s' %s", strings.Join(args, " "), args)
 	// 	os.Exit(2)
@@ -123,12 +126,13 @@ func TestHelperProcess(t *testing.T) {
 	}
 
 	if (len(out) > 0) && (out != string(' ')) {
-		fmt.Fprintf(os.Stdout, fmt.Sprintf("'%v'", out))
+		fmt.Fprintf(os.Stdout, "'%v'", out)
 	}
 
 	os.Exit(exitCode)
 }
 
+// GetFunctionName returns name of the function/
 func GetFunctionName(i interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 }

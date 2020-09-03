@@ -11,7 +11,7 @@ func BenchmarkRegistryAdd(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		job := NewJob(fmt.Sprintf("job-%v", b.N), fmt.Sprintf("echo"))
+		job := NewJob(fmt.Sprintf("job-%v", b.N), "echo")
 		r.Add(job)
 	}
 }
@@ -21,7 +21,7 @@ func BenchmarkRegistryCleanUp(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		r := NewRegistry()
 		for ii := 0; ii < 100; ii++ {
-			job := NewJob(fmt.Sprintf("job-%v", b.N), fmt.Sprintf("echo"))
+			job := NewJob(fmt.Sprintf("job-%v", b.N), "echo")
 			r.Add(job)
 			r.Cleanup()
 		}
@@ -31,7 +31,7 @@ func BenchmarkRegistryCleanUp(b *testing.B) {
 func TestRegistryAddNoDuplicateJob(t *testing.T) {
 	r := NewRegistry()
 	for ii := 0; ii < 100; ii++ {
-		job := NewJob(fmt.Sprintf("job-%v", ii), fmt.Sprintf("echo"))
+		job := NewJob(fmt.Sprintf("job-%v", ii), "echo")
 		if !r.Add(job) {
 			t.Errorf("Expect to add job")
 		}
@@ -49,7 +49,7 @@ func TestRegistryLen(t *testing.T) {
 	r := NewRegistry()
 	num := 100
 	for ii := 0; ii < num; ii++ {
-		job := NewJob(fmt.Sprintf("job-%v", ii), fmt.Sprintf("echo"))
+		job := NewJob(fmt.Sprintf("job-%v", ii), "echo")
 		if !r.Add(job) {
 			t.Errorf("Expect to add job")
 		}
@@ -63,7 +63,7 @@ func TestRegistryDelete(t *testing.T) {
 	r := NewRegistry()
 	num := 100
 	for ii := 0; ii < num; ii++ {
-		job := NewJob(fmt.Sprintf("job-%v", ii), fmt.Sprintf("echo"))
+		job := NewJob(fmt.Sprintf("job-%v", ii), "echo")
 		if !r.Add(job) {
 			t.Errorf("Expect to add job")
 		}
@@ -84,7 +84,7 @@ func TestRegistryCleanup(t *testing.T) {
 	r := NewRegistry()
 	num := 100
 	for ii := 0; ii < num; ii++ {
-		job := NewJob(fmt.Sprintf("job-%v", ii), fmt.Sprintf("echo"))
+		job := NewJob(fmt.Sprintf("job-%v", ii), "echo")
 		job.TTR = 10000
 		// no cancelation flow on cleanup
 		// right now it won't execute something

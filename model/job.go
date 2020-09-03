@@ -5,9 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -17,7 +15,7 @@ import (
 // IsTerminalStatus returns true if status is terminal:
 // - Failed
 // - Canceled
-// - Successfull
+// - Successful
 func IsTerminalStatus(status string) bool {
 	switch status {
 	case JOB_STATUS_ERROR, JOB_STATUS_CANCELED, JOB_STATUS_SUCCESS:
@@ -33,25 +31,27 @@ func StoreKey(Id string, RunUID string, ExtraRunUID string) string {
 	return fmt.Sprintf("%s:%s:%s", Id, RunUID, ExtraRunUID)
 }
 
+// Job public structure
 type Job struct {
-	Id             string
-	RunUID         string
-	ExtraRunUID    string
-	Priority       int64
-	CreateAt       time.Time
-	StartAt        time.Time
-	LastActivityAt time.Time
-	Status         string
-	MaxAttempts    int      // Absoulute max num of attempts.
-	MaxFails       int      // Absolute max number of failures.
-	TTR            uint64   // Time-to-run in Millisecond
-	CMD            string   // Comamand
-	CmdENV         []string // Comamand
+	Id             string    // Identificator for Job
+	RunUID         string    // Running indentification
+	ExtraRunUID    string    // Extra indentification
+	Priority       int64     // Priority for a Job
+	CreateAt       time.Time // When Job was created
+	StartAt        time.Time // When command started
+	LastActivityAt time.Time // When job metadata last changed
+	Status         string    // Currentl status
+	MaxAttempts    int       // Absoulute max num of attempts.
+	MaxFails       int       // Absolute max number of failures.
+	TTR            uint64    // Time-to-run in Millisecond
+	CMD            string    // Comamand
+	CmdENV         []string  // Comamand
+	RunAs          string    // RunAs defines user
 
 	StreamInterval time.Duration
 	mu             sync.RWMutex
 	exitError      error
-	ExitCode       int
+	ExitCode       int // Exit code
 	cmd            *exec.Cmd
 	ctx            context.Context
 
@@ -65,13 +65,21 @@ type Job struct {
 	stremMu           sync.Mutex
 	counter           uint
 	timeQuote         bool
-	UseSHELL          bool
-	streamsBuf        []string
+	// If we should use shell and wrap the command
+	UseSHELL   bool
+	streamsBuf []string
 }
 
 // StoreKey returns StoreKey
 func (j *Job) StoreKey() string {
 	return StoreKey(j.Id, j.RunUID, j.ExtraRunUID)
+}
+
+// GetStatus get job status.
+func (j *Job) GetStatus() string {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.Status
 }
 
 // updatelastActivity for the Job
@@ -92,7 +100,7 @@ func (j *Job) GetRawParams() []map[string]interface{} {
 	return j.RawParams
 }
 
-// GetRawParams from all previous calls
+// PutRawParams for all next calls
 func (j *Job) PutRawParams(params []map[string]interface{}) error {
 	j.RawParams = params
 	return nil
@@ -133,7 +141,10 @@ func (j *Job) Cancel() error {
 			}
 		}
 
-		j.updateStatus(JOB_STATUS_CANCELED)
+		if errUpdate := j.updateStatus(JOB_STATUS_CANCELED); errUpdate != nil {
+			log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, JOB_STATUS_CANCELED)
+
+		}
 		j.updatelastActivity()
 		stage := "jobs.cancel"
 		params := j.GetAPIParams(stage)
@@ -147,7 +158,7 @@ func (j *Job) Cancel() error {
 	return nil
 }
 
-// Cancel job
+// Failed job flow
 // update your API
 func (j *Job) Failed() error {
 	j.mu.Lock()
@@ -161,7 +172,10 @@ func (j *Job) Failed() error {
 			}
 		}
 
-		j.updateStatus(JOB_STATUS_ERROR)
+		if errUpdate := j.updateStatus(JOB_STATUS_ERROR); errUpdate != nil {
+			log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, JOB_STATUS_ERROR)
+
+		}
 		log.Tracef("[FAILED] Job '%s' moved to state %s", j.Id, j.Status)
 
 		j.updatelastActivity()
@@ -176,12 +190,12 @@ func (j *Job) Failed() error {
 	return nil
 }
 
-// AppendLogStream for job
+//  for job
 // update your API
 func (j *Job) AppendLogStream(logStream []string) error {
 	if j.quotaHit() {
 		<-j.notify
-		j.doSendSteamBuf()
+		_ = j.doSendSteamBuf()
 	}
 	j.incrementCounter()
 	j.stremMu.Lock()
@@ -215,7 +229,7 @@ func (j *Job) resetCounterLoop(after time.Duration) {
 	for {
 		select {
 		case <-j.notifyStopStreams:
-			j.doSendSteamBuf()
+			_ = j.doSendSteamBuf()
 			j.notifyLogSent <- struct{}{}
 
 			log.Tracef("resetCounterLoop finished for '%v'", j.Id)
@@ -238,7 +252,7 @@ func (j *Job) resetCounterLoop(after time.Duration) {
 			j.stremMu.Unlock()
 		// flush Buffer for slow logs
 		case <-tickerSlowLogsInterval.C:
-			j.doSendSteamBuf()
+			_ = j.doSendSteamBuf()
 		}
 	}
 }
@@ -250,7 +264,7 @@ func (j *Job) doNotify() {
 	}
 }
 
-// FlushSteamsBuffer
+// FlushSteamsBuffer - empty current job's streams lines
 func (j *Job) FlushSteamsBuffer() error {
 	return j.doSendSteamBuf()
 }
@@ -258,10 +272,11 @@ func (j *Job) FlushSteamsBuffer() error {
 // doSendSteamBuf low-level functions which sends streams to the remote API
 // Send stream only if there is something
 func (j *Job) doSendSteamBuf() error {
+	j.stremMu.Lock()
+	defer j.stremMu.Unlock()
 	if len(j.streamsBuf) > 0 {
-		j.stremMu.Lock()
 		// log.Tracef("doSendSteamBuf for '%v' len '%v' %v\n ", j.Id, len(j.streamsBuf),j.streamsBuf)
-		defer j.stremMu.Unlock()
+
 		streamsReader := strings.NewReader(strings.Join(j.streamsBuf, ""))
 		// update API
 		stage := "jobs.logstream"
@@ -275,7 +290,9 @@ func (j *Job) doSendSteamBuf() error {
 
 		} else {
 			var buf bytes.Buffer
-			buf.ReadFrom(streamsReader)
+			if _, errReadFrom := buf.ReadFrom(streamsReader); errReadFrom != nil {
+				log.Tracef("buf.ReadFrom error %v\n", errReadFrom)
+			}
 			fmt.Printf("Job '%s': %s\n", j.Id, buf.String())
 		}
 		j.streamsBuf = nil
@@ -288,99 +305,41 @@ func (j *Job) doSendSteamBuf() error {
 // returns error
 // supports cancellation
 func (j *Job) runcmd() error {
-	var ctx context.Context
-	var cancel context.CancelFunc
-	// in case we have time limitation or context
-	if (j.TTR > 0) && (j.ctx != nil) {
-		ctx, cancel = context.WithTimeout(j.ctx, time.Duration(j.TTR)*time.Millisecond)
-	} else if (j.TTR > 0) && (j.ctx == nil) {
-		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(j.TTR)*time.Millisecond)
-	} else if j.ctx != nil {
-		ctx, cancel = context.WithCancel(j.ctx)
-	} else {
-		ctx, cancel = context.WithCancel(context.Background())
-	}
+	j.mu.Lock()
+	ctx, cancel := prepareContaxt(j.ctx, j.TTR)
 	defer cancel()
 	// Use shell wrapper
-	j.mu.Lock()
-	cmd_splitted := strings.Fields(j.CMD)
-	defaultPath := "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-	if useCmdAsIs(j.CMD) {
-		j.cmd = execCommandContext(ctx, cmd_splitted[0], cmd_splitted[1:]...)
-
-	} else if j.UseSHELL {
-		shell := "sh"
-		args := []string{"-c", j.CMD}
-		switch runtime.GOOS {
-		case "windows":
-			defaultPath = "%SystemRoot%\\system32;%SystemRoot%;%SystemRoot%\\System32\\Wbem"
-
-			shell = "powershell.exe"
-			if ps, err := exec.LookPath("powershell.exe"); err == nil {
-				args = []string{"-NoProfile", "-NonInteractive", j.CMD}
-				shell = ps
-
-			} else if bash, err := exec.LookPath("bash.exe"); err == nil {
-				shell = bash
-			} else {
-				log.Tracef("Can't fetch powershell nor bash, got %s\n", err)
-			}
-
-		default:
-			if bash, err := exec.LookPath("bash"); err == nil {
-				shell = bash
-			}
-
-		}
-		j.cmd = execCommandContext(ctx, shell, args...)
-	} else {
-		j.cmd = execCommandContext(ctx, cmd_splitted[0], cmd_splitted[1:]...)
-	}
-
-	mergedENV := append(j.CmdENV, os.Environ()...)
-	mergedENV = append(mergedENV, defaultPath)
-	unique := make(map[string]bool, len(mergedENV))
-
-	for indx := range mergedENV {
-		if len(strings.Split(mergedENV[indx], "=")) != 2 {
-			continue
-		}
-		k := strings.Split(mergedENV[indx], "=")[0]
-		if _, ok := unique[k]; !ok {
-			j.cmd.Env = append(j.cmd.Env, mergedENV[indx])
-			unique[k] = true
-		}
-		// if strings.HasPrefix(j.cmd.Env[indx],"PATH="){
-		//     j.cmd.Env[indx]
-		// }
-	}
+	shell, args := CmdWrapper(j.RunAs, j.UseSHELL, j.CMD)
+	j.cmd = execCommandContext(ctx, shell, args...)
+	j.cmd.Env = MergeEnvVars(j.CmdENV)
 	j.mu.Unlock()
 
 	stdout, err := j.cmd.StdoutPipe()
 	if err != nil {
-		j.AppendLogStream([]string{fmt.Sprintf("cmd.StdoutPipe %s\n", err)})
+		_ = j.AppendLogStream([]string{fmt.Sprintf("cmd.StdoutPipe %s\n", err)})
 		return fmt.Errorf("cmd.StdoutPipe, %s", err)
 	}
 
 	stderr, err := j.cmd.StderrPipe()
 	if err != nil {
-		j.AppendLogStream([]string{fmt.Sprintf("cmd.StderrPipe %s\n", err)})
+		_ = j.AppendLogStream([]string{fmt.Sprintf("cmd.StderrPipe %s\n", err)})
 		return fmt.Errorf("cmd.StderrPipe, %s", err)
 	}
 
-	log.Trace(fmt.Sprintf("Run cmd: %v\n", j.cmd))
+	log.Tracef("Run cmd: %v\n", j.cmd)
 	err = j.cmd.Start()
 	j.mu.Lock()
-	j.updateStatus(JOB_STATUS_IN_PROGRESS)
+	if errUpdate := j.updateStatus(JOB_STATUS_IN_PROGRESS); errUpdate != nil {
+		log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, JOB_STATUS_IN_PROGRESS)
+	}
 	j.mu.Unlock()
 	// update API
 	stage := "jobs.run"
-	params := j.GetAPIParams(stage)
-	if errApi, result := DoApiCall(j.ctx, params, stage); errApi != nil {
+	if errApi, result := DoApiCall(j.ctx, j.GetAPIParams(stage), stage); errApi != nil {
 		log.Tracef("failed to update api, got: %s and %s\n", result, errApi)
 	}
 	if err != nil {
-		j.AppendLogStream([]string{fmt.Sprintf("cmd.Start %s\n", err)})
+		_ = j.AppendLogStream([]string{fmt.Sprintf("cmd.Start %s\n", err)})
 		return fmt.Errorf("cmd.Start, %s", err)
 	}
 	notifyStdoutSent := make(chan bool)
@@ -400,7 +359,7 @@ func (j *Job) runcmd() error {
 		for scanner.Scan() {
 			msg := scanner.Text()
 			// log.Tracef("stdout: %s\n", msg)
-			j.AppendLogStream([]string{fmt.Sprintf("%s\n", msg)})
+			_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", msg)})
 		}
 	}()
 	// parse stderr
@@ -413,7 +372,7 @@ func (j *Job) runcmd() error {
 		for scanner.Scan() {
 			msg := scanner.Text()
 			// log.Tracef("stderr: %s\n", msg)
-			j.AppendLogStream([]string{fmt.Sprintf("%s\n", msg)})
+			_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", msg)})
 		}
 	}()
 
@@ -444,7 +403,7 @@ func (j *Job) runcmd() error {
 	}
 	if exitCode != 0 {
 		err = fmt.Errorf("exit code '%d'", exitCode)
-		j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
+		_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
 		j.exitError = err
 	}
 	if err == nil {
@@ -477,10 +436,14 @@ func (j *Job) Run() error {
 	j.exitError = err
 	j.updatelastActivity()
 	if !IsTerminalStatus(j.Status) {
+		finalStatus := JOB_STATUS_ERROR
 		if err == nil {
-			j.updateStatus(JOB_STATUS_SUCCESS)
-		} else {
-			j.updateStatus(JOB_STATUS_ERROR)
+			finalStatus = JOB_STATUS_SUCCESS
+		}
+
+		if errUpdate := j.updateStatus(finalStatus); errUpdate != nil {
+			log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, finalStatus)
+
 		}
 		log.Tracef("[RUN] Job '%s' is moved to state %s", j.Id, j.Status)
 	} else {
@@ -490,13 +453,14 @@ func (j *Job) Run() error {
 	return err
 }
 
-// Finish sucessfull job
-// update your API
+// Finish is triggered when execution is successful.
 func (j *Job) Finish() error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.updatelastActivity()
-	j.updateStatus(JOB_STATUS_SUCCESS)
+	if errUpdate := j.updateStatus(JOB_STATUS_SUCCESS); errUpdate != nil {
+		log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, JOB_STATUS_SUCCESS)
+	}
 	stage := "jobs.finish"
 	params := j.GetAPIParams(stage)
 	if err, result := DoApiCall(j.ctx, params, stage); err != nil {
@@ -534,6 +498,7 @@ func NewJob(id string, cmd string) *Job {
 		counter:           0,
 		elements:          100,
 		UseSHELL:          true,
+		RunAs:             "",
 		StreamInterval:    time.Duration(5) * time.Second,
 	}
 }

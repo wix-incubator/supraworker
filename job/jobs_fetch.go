@@ -1,33 +1,28 @@
 package job
 
 import (
-	// "bytes"
 	"context"
-	// "encoding/json"
 	"fmt"
 	"github.com/sirupsen/logrus"
-	// "github.com/spf13/viper"
-	// "html/template"
-	// "io/ioutil"
-	// "net/http"
+	model "github.com/weldpua2008/supraworker/model"
+	"strconv"
 	"strings"
 	"time"
-	// "runtime"
-
-	// config "github.com/weldpua2008/supraworker/config"
-	model "github.com/weldpua2008/supraworker/model"
 )
 
 var (
-	log          = logrus.WithFields(logrus.Fields{"package": "job"})
+	log = logrus.WithFields(logrus.Fields{"package": "job"})
+	// Registry for the Jobs
 	JobsRegistry = model.NewRegistry()
 )
 
+// ApiJobRequest is struct for new jobs
 type ApiJobRequest struct {
-	Job_status string `json:"job_status"`
-	Limit      int64  `json:"limit"`
+	JobStatus string `json:"job_status"`
+	Limit     int64  `json:"limit"`
 }
 
+// An ApiJobResponse represents a Job response.
 // Example response
 // {
 //   "job_id": "dbd618f0-a878-e477-7234-2ef24cb85ef6",
@@ -59,15 +54,15 @@ type ApiJobResponse struct {
 // NewApiJobRequest prepare struct for Jobs for execution request
 func NewApiJobRequest() *ApiJobRequest {
 	return &ApiJobRequest{
-		Job_status: "PENDING",
-		Limit:      5,
+		JobStatus: "PENDING",
+		Limit:     5,
 	}
 }
 
 // StartGenerateJobs goroutine for getting jobs from API with internal
 // it expects `model.FetchNewJobAPIURL`
 // exists on kill
-func StartGenerateJobs(jobs chan *model.Job, ctx context.Context, interval time.Duration) error {
+func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.Duration) error {
 	if len(model.FetchNewJobAPIURL) < 1 {
 		close(jobs)
 		log.Warn("Please provide URL to fetch new Jobs")
@@ -91,14 +86,13 @@ func StartGenerateJobs(jobs chan *model.Job, ctx context.Context, interval time.
 				close(jobs)
 				doneNumJobs <- j
 				if GracefullShutdown(jobs) {
-					log.Debug("Jobs generation finished [ SUCESSFULLY ]")
+					log.Debug("Jobs generation finished [ SUCCESSFULLY ]")
 				} else {
 					log.Warn("Jobs generation finished [ FAILED ]")
 				}
 
 				return
 			case <-tickerGenerateJobs.C:
-				// log.Tracef("The number of goroutines that currently exist.: %v", runtime.NumGoroutine())
 				if err, jobsData := model.NewRemoteApiRequest(ctx, "jobs.get.params", model.FetchNewJobAPIMethod, model.FetchNewJobAPIURL); err == nil {
 
 					for _, jobResponse := range jobsData {
@@ -106,6 +100,7 @@ func StartGenerateJobs(jobs chan *model.Job, ctx context.Context, interval time.
 						var CMD string
 						var RunUID string
 						var ExtraRunUID string
+						var TTR uint64
 
 						for key, value := range jobResponse {
 							switch strings.ToLower(key) {
@@ -113,6 +108,19 @@ func StartGenerateJobs(jobs chan *model.Job, ctx context.Context, interval time.
 								JobId = fmt.Sprintf("%v", value)
 							case "cmd", "command", "execute":
 								CMD = fmt.Sprintf("%v", value)
+							case "ttl", "ttr", "ttl_sec", "ttl_seconds":
+								if i, err := strconv.ParseInt(fmt.Sprintf("%v", value), 10, 64); err == nil {
+									TTR = uint64(i)
+								}
+							case "stopDate", "stopdate", "stop_date", "stop":
+								if i, err := strconv.ParseInt(fmt.Sprintf("%v", value), 10, 64); err == nil {
+									now := time.Now()
+									sec := now.Unix() // number of seconds since January 1, 1970 UTC
+									if (i - sec) > 0 {
+										TTR = uint64(i - sec)
+									}
+
+								}
 							case "runid", "runuid", "run_id", "run_uid":
 								RunUID = fmt.Sprintf("%v", value)
 							case "extrarunid", "extrarunuid", "extrarun_id", "extrarun_uid", "extra_run_id", "extra_run_uid":
@@ -123,13 +131,15 @@ func StartGenerateJobs(jobs chan *model.Job, ctx context.Context, interval time.
 							continue
 						}
 
-						job := model.NewJob(fmt.Sprintf("%v", JobId), fmt.Sprintf("%s", CMD))
+						job := model.NewJob(fmt.Sprintf("%v", JobId), CMD)
 						job.RunUID = RunUID
 						job.ExtraRunUID = ExtraRunUID
 						job.RawParams = append(job.RawParams, jobResponse)
-						// log.Tracef("job.RawParams %v", job.RawParams)
 						job.SetContext(ctx)
-						job.TTR = 0
+						if TTR < 1 {
+							TTR = 3600 * 8
+						}
+						job.TTR = TTR
 						if JobsRegistry.Add(job) {
 							jobs <- job
 							j += 1
@@ -159,7 +169,7 @@ func StartGenerateJobs(jobs chan *model.Job, ctx context.Context, interval time.
 			select {
 			case <-ctx.Done():
 				doneNumCancelJobs <- j
-				log.Debug("Jobs cancelation finished [ SUCESSFULLY ]")
+				log.Debug("Jobs cancelation finished [ SUCCESSFULLY ]")
 
 				return
 			case <-tickerCancelJobs.C:
@@ -178,7 +188,6 @@ func StartGenerateJobs(jobs chan *model.Job, ctx context.Context, interval time.
 
 					for _, jobResponse := range jobsCancelationData {
 						var JobId string
-						// var CMD string
 						var RunUID string
 						var ExtraRunUID string
 
@@ -186,8 +195,6 @@ func StartGenerateJobs(jobs chan *model.Job, ctx context.Context, interval time.
 							switch strings.ToLower(key) {
 							case "id", "jobid", "job_id", "job_uid":
 								JobId = fmt.Sprintf("%v", value)
-							// case "cmd", "command", "execute":
-							//     CMD = fmt.Sprintf("%v", value)
 							case "runid", "runuid", "run_id", "run_uid":
 								RunUID = fmt.Sprintf("%v", value)
 							case "extrarunid", "extrarunuid", "extrarun_id", "extrarun_uid", "extra_run_id", "extra_run_uid":

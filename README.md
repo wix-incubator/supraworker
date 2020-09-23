@@ -62,7 +62,7 @@ curl --silent -L  "https://api.github.com/repos/weldpua2008/supraworker/releases
 
 ### Installing from source
 
-1. install [Go](http://golang.org) `v1.12+`
+1. install [Go](http://golang.org) `v1.13+`
 1. clone this down into your `$GOPATH`
   * `mkdir -p $GOPATH/src/github.com/weldpua2008`
   * `git clone https://github.com/weldpua2008/supraworker $GOPATH/src/github.com/weldpua2008/supraworker`

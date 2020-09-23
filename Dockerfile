@@ -1,10 +1,10 @@
-FROM golang:1.12-alpine AS build-env
+FROM golang:1.13-alpine AS build-env
 
 WORKDIR /go/src/github.com/weldpua2008/supraworker
 
 COPY . .
 
-RUN apk --no-cache add build-base git bzr mercurial gcc
+RUN apk --no-cache add build-base git mercurial gcc
 
 # docker image build --no-cache --tag supraworker:snapshot --build-arg GIT_COMMIT=$(git log -1 --format=%H) .
 ARG GIT_COMMIT

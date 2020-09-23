@@ -6,10 +6,12 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"html/template"
 	"os"
 	"runtime"
 	"strings"
@@ -143,4 +145,23 @@ func initConfig() {
 	}
 	log.Debug(viper.ConfigFileUsed())
 
+}
+
+func GetStringTemplatedDefault(section string, def string) string {
+	v := viper.GetString(section)
+	if len(v) > 0 {
+		var tplBytes bytes.Buffer
+
+		tpl, err1 := template.New("params").Parse(v)
+		if err1 != nil {
+			return def
+		}
+		err := tpl.Execute(&tplBytes, C)
+		if err != nil {
+			return def
+		}
+		return tplBytes.String()
+
+	}
+	return def
 }

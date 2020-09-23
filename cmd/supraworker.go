@@ -13,14 +13,15 @@ import (
 	"github.com/spf13/viper"
 	config "github.com/weldpua2008/supraworker/config"
 	job "github.com/weldpua2008/supraworker/job"
+	metrics "github.com/weldpua2008/supraworker/metrics"
 	model "github.com/weldpua2008/supraworker/model"
 	worker "github.com/weldpua2008/supraworker/worker"
-	"time"
-	// "html/template"
+
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 )
 
 var (
@@ -100,6 +101,11 @@ var rootCmd = &cobra.Command{
 			}
 			config.ReinitializeConfig()
 		})
+		addr := config.GetStringTemplatedDefault("healthcheck.listen", ":8080")
+		healthcheck_uri := config.GetStringTemplatedDefault("healthcheck.uri", "/health/is_alive")
+		srv := metrics.StartHealthCheck(addr, healthcheck_uri)
+		defer metrics.WaitForShutdown(ctx, srv)
+
 		go func() {
 			if err := job.StartGenerateJobs(ctx, jobs, apiCallDelaySeconds); err != nil {
 				log.Tracef("StartGenerateJobs returned error %v", err)

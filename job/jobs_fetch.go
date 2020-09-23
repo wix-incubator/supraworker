@@ -110,14 +110,14 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 								CMD = fmt.Sprintf("%v", value)
 							case "ttl", "ttr", "ttl_sec", "ttl_seconds":
 								if i, err := strconv.ParseInt(fmt.Sprintf("%v", value), 10, 64); err == nil {
-									TTR = uint64(i)
+									TTR = uint64((time.Duration(i) * time.Second).Milliseconds())
 								}
 							case "stopDate", "stopdate", "stop_date", "stop":
 								if i, err := strconv.ParseInt(fmt.Sprintf("%v", value), 10, 64); err == nil {
 									now := time.Now()
 									sec := now.Unix() // number of seconds since January 1, 1970 UTC
 									if (i - sec) > 0 {
-										TTR = uint64(i - sec)
+										TTR = uint64((time.Duration(i-sec) * time.Second).Milliseconds())
 									}
 
 								}
@@ -137,10 +137,12 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 						job.RawParams = append(job.RawParams, jobResponse)
 						job.SetContext(ctx)
 						if TTR < 1 {
-							TTR = 3600 * 8
+
+							TTR = uint64((time.Duration(3600) * time.Second).Milliseconds())
 						}
-						job.TTR = TTR * 1000
+						job.TTR = TTR
 						if JobsRegistry.Add(job) {
+							jobsProcessed.Inc()
 							jobs <- job
 							j += 1
 							log.Trace(fmt.Sprintf("sent job id %v ", job.Id))

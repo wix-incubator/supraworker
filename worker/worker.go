@@ -2,16 +2,11 @@ package worker
 
 import (
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
 	// worker "github.com/weldpua2008/supraworker/worker"
 	"github.com/weldpua2008/supraworker/job"
 	"github.com/weldpua2008/supraworker/model"
-)
-
-var (
-	log = logrus.WithFields(logrus.Fields{"package": "worker"})
 )
 
 // StartWorker run goroutine for executing commands and reporting to your API
@@ -33,6 +28,7 @@ func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
 				log.Tracef("Job %v failed to flush buffer due %v", j.Id, errFlushBuf)
 			}
 			_ = j.Failed()
+			jobsFailed.Inc()
 		} else {
 			dur := time.Since(j.StartAt)
 			log.Debugf("Job %v finished in %v", j.Id, dur)
@@ -40,7 +36,10 @@ func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
 				log.Tracef("Job %v failed to flush buffer due %v", j.Id, errFlushBuf)
 			}
 			_ = j.Finish()
+			jobsSucceeded.Inc()
+			jobsDuration.Observe(dur.Seconds())
 		}
+		jobsProcessed.Inc()
 		job.JobsRegistry.Delete(j.StoreKey())
 
 	}

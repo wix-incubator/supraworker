@@ -1,8 +1,8 @@
-FROM golang:1.12-alpine
+FROM golang:1.13-alpine
 
 WORKDIR /go/src/github.com/weldpua2008/supraworker
 
-RUN apk --no-cache add build-base git bzr mercurial gcc
+RUN apk --no-cache add build-base git mercurial gcc
 COPY . .
 RUN go get -d -v ./... && \
     go install -v ./... && \

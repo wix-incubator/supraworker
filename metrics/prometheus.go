@@ -31,7 +31,7 @@ func StartHealthCheck(listenAddr string, uri string) *http.Server {
 	http.Handle("/metrics", promhttp.Handler())
 
 	go func() {
-		if err := srv.ListenAndServe(); err !=nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("%v %v", ErrServerListenError, err)
 		}
 	}()
@@ -39,7 +39,7 @@ func StartHealthCheck(listenAddr string, uri string) *http.Server {
 }
 
 func WaitForShutdown(ctx context.Context, srv *http.Server) {
-	if err := srv.Shutdown(ctx); err !=nil &&  err != http.ErrServerClosed {
+	if err := srv.Shutdown(ctx); err != nil && err != http.ErrServerClosed {
 		log.Warningf("Shutdown %v", err)
 
 	}

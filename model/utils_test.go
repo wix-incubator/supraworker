@@ -2,12 +2,17 @@ package model
 
 import (
 	"fmt"
+	"go.uber.org/goleak"
 	"os"
 	"runtime"
 	"sort"
 	"strings"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
 func TestDefaultPath(t *testing.T) {
 	path := os.Getenv("PATH")

@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/weldpua2008/supraworker/model"
 	"github.com/weldpua2008/supraworker/model/cmdtest"
+	"go.uber.org/goleak"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,12 @@ func TestHelperProcess(t *testing.T) {
 	cmdtest.TestHelperProcess(t)
 }
 
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
+
 func TestGenerateJobs(t *testing.T) {
+	// defer goleak.VerifyNone(t)
 
 	// startTrace()
 	want := "{\"job_uid\":\"job-testing.(*common).Name-fm\",\"run_uid\":\"1\",\"extra_run_id\":\"1\",\"msg\":\"'S'\\n\"}"

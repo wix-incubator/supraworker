@@ -216,7 +216,7 @@ func (j *Job) quotaHit() bool {
 }
 
 //scheduled elements counter refresher
-func (j *Job) resetCounterLoop(after time.Duration) {
+func (j *Job) resetCounterLoop(ctx context.Context, after time.Duration) {
 	ticker := time.NewTicker(after)
 	tickerTimeInterval := time.NewTicker(2 * after)
 	tickerSlowLogsInterval := time.NewTicker(10 * after)
@@ -224,13 +224,19 @@ func (j *Job) resetCounterLoop(after time.Duration) {
 		ticker.Stop()
 		tickerTimeInterval.Stop()
 		tickerSlowLogsInterval.Stop()
-		close(j.notifyLogSent)
+		// close(j.notifyLogSent)
 	}()
 	for {
 		select {
+		case <-ctx.Done():
+			_ = j.doSendSteamBuf()
+			// j.notifyLogSent <- struct{}{}
+
+			log.Tracef("resetCounterLoop finished for '%v'", j.Id)
+			return
 		case <-j.notifyStopStreams:
 			_ = j.doSendSteamBuf()
-			j.notifyLogSent <- struct{}{}
+			// j.notifyLogSent <- struct{}{}
 
 			log.Tracef("resetCounterLoop finished for '%v'", j.Id)
 			return
@@ -342,12 +348,14 @@ func (j *Job) runcmd() error {
 		_ = j.AppendLogStream([]string{fmt.Sprintf("cmd.Start %s\n", err)})
 		return fmt.Errorf("cmd.Start, %s", err)
 	}
-	notifyStdoutSent := make(chan bool)
-	notifyStderrSent := make(chan bool)
+	notifyStdoutSent := make(chan bool, 1)
+	notifyStderrSent := make(chan bool, 1)
 
 	// reset backpresure counter
 	per := 5 * time.Second
-	go j.resetCounterLoop(per)
+	resetCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go j.resetCounterLoop(resetCtx, per)
 
 	// parse stdout
 	// send logs to streaming API

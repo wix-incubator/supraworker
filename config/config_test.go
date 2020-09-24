@@ -1,9 +1,13 @@
 package config
 
 import (
+	"go.uber.org/goleak"
 	"testing"
-	// "github.com/spf13/viper"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
 func TestLoadConfig(t *testing.T) {
 	tmp := C

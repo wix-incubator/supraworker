@@ -11,7 +11,12 @@ import (
 	"github.com/sirupsen/logrus"
 	model "github.com/weldpua2008/supraworker/model"
 	"github.com/weldpua2008/supraworker/model/cmdtest"
+	"go.uber.org/goleak"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
 func TestHelperProcess(t *testing.T) {
 	cmdtest.TestHelperProcess(t)

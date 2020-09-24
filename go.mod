@@ -8,4 +8,5 @@ require (
 	github.com/sirupsen/logrus v1.2.0
 	github.com/spf13/cobra v0.0.7-0.20200228181340-95f2f73ed97e
 	github.com/spf13/viper v1.6.2
+	go.uber.org/goleak v1.1.10
 )

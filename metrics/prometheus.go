@@ -32,7 +32,7 @@ func StartHealthCheck(listenAddr string, uri string) *http.Server {
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("%v %v", ErrServerListenError, err)
+			log.Warningf("%v %v", ErrServerListenError, err)
 		}
 	}()
 	return srv

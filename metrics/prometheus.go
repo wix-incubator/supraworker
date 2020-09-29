@@ -31,15 +31,15 @@ func StartHealthCheck(listenAddr string, uri string) *http.Server {
 	http.Handle("/metrics", promhttp.Handler())
 
 	go func() {
-		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-			log.Fatalf("%v %v", ErrServerListenError, err)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Warningf("%v %v", ErrServerListenError, err)
 		}
 	}()
 	return srv
 }
 
 func WaitForShutdown(ctx context.Context, srv *http.Server) {
-	if err := srv.Shutdown(ctx); err != http.ErrServerClosed {
+	if err := srv.Shutdown(ctx); err != nil && err != http.ErrServerClosed {
 		log.Warningf("Shutdown %v", err)
 
 	}

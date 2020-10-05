@@ -20,6 +20,20 @@ $ xattr -d com.apple.quarantine /Users/weldpua2008/Downloads/supraworker_darwin_
 $ /Users/weldpua2008/Downloads/supraworker_darwin_amd64/supraworker
 ```
 
+* MacOs X
+Homebrew is a free and open-source package management system for Mac OS X.
+
+```bash
+ brew tap weldpua2008/tap
+ brew install weldpua2008/tap/supraworker
+```
+
+To update to the latest, run
+
+```bash
+brew upgrade weldpua2008/tap/supraworker
+```
+
 ### Configuring
 
 Define config at `$HOME/supraworker.yaml`:

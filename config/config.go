@@ -15,6 +15,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const (
@@ -25,7 +26,15 @@ const (
 // Config is top level Configuration structure
 type Config struct {
 	// Indentification for the process
-	ClientId string `mapstructure:"clientId"`
+	ClientId      string `mapstructure:"clientId"`
+	NumActiveJobs int    // Number of jobs
+	NumFreeSlots  int    // Number of free jobs slots
+	NumWorkers    int
+
+	ClusterId   string
+	ClusterPool string
+	URL         string // Used for overload URL for Tests "{{.URL}}"
+
 	// delay between API calls to prevent Denial-of-service
 	CallAPIDelaySec int `mapstructure:"api_delay_sec"`
 	// represent API for Jobs
@@ -70,16 +79,9 @@ var (
 	// C defines main configuration structure.
 	C Config = Config{
 		CallAPIDelaySec: int(2),
-
-		// JobsAPI: UrlConf{
-		//     Method: "GET",
-		//     Headers: []RequestHeader{
-		//         RequestHeader{
-		//             Key: "Content-type",
-		//             Value: "application/json",
-		//         },
-		//     },
-		// },
+		NumActiveJobs:   0,
+		NumFreeSlots:    0,
+		NumWorkers:      0,
 	}
 	log = logrus.WithFields(logrus.Fields{"package": "config"})
 )
@@ -164,4 +166,148 @@ func GetStringTemplatedDefault(section string, def string) string {
 
 	}
 	return def
+}
+
+// GetMapStringMapStringTemplatedDefault returns map of [string]string maps templated & enriched by default.
+func GetMapStringMapStringTemplatedDefault(section string, param string, def map[string]string) map[string]map[string]string {
+	ret := make(map[string]map[string]string, 0)
+	sections_values := viper.GetStringMap(fmt.Sprintf("%s.%s", section, param))
+	for subsection, section_value := range sections_values {
+		if section_value == nil {
+			continue
+		}
+		// log.Infof("%s.%s => %v",  section, param,k1)
+		if params, ok := section_value.(map[string]interface{}); ok {
+			c := make(map[string]string)
+			for k, v := range def {
+				c[k] = v
+			}
+			for k, v := range params {
+				var tplBytes bytes.Buffer
+				tpl, err1 := template.New("params").Parse(fmt.Sprintf("%v", v))
+				if err1 != nil {
+					continue
+				}
+
+				// tpl := template.Must(template.New("params").Parse(fmt.Sprintf("%v", v)))
+				if err := tpl.Execute(&tplBytes, C); err != nil {
+					// log.Tracef("params executing template for %v got %s", v, err)
+					continue
+				}
+				c[k] = tplBytes.String()
+			}
+			ret[fmt.Sprintf("%s.%s.%s", section, param, subsection)] = c
+		}
+
+	}
+	return ret
+}
+func GetStringMapStringTemplatedDefault(section string, param string, def map[string]string) map[string]string {
+	c := make(map[string]string)
+	for k, v := range def {
+		c[k] = v
+	}
+	params := viper.GetStringMapString(fmt.Sprintf("%s.%s", section, param))
+	for k, v := range params {
+
+		var tplBytes bytes.Buffer
+		// WARNING: will panic:
+		// tpl := template.Must(template.New("params").Parse(v))
+		// we can preserve failed templated string
+		c[k] = v
+		tpl, err1 := template.New("params").Parse(v)
+		if err1 != nil {
+			continue
+		}
+		err := tpl.Execute(&tplBytes, C)
+		if err != nil {
+			log.Tracef("params executing template: %s", err)
+			continue
+		}
+		c[k] = tplBytes.String()
+	}
+	return c
+}
+
+// GetStringDefault return section string or default.
+func GetStringDefault(section string, def string) string {
+	if val := viper.GetString(section); len(val) > 0 {
+		return val
+	}
+	return def
+}
+
+// GetBool return section string or default.
+func GetBool(section string) bool {
+	return viper.GetBool(section)
+}
+
+func GetStringMapStringTemplated(section string, param string) map[string]string {
+	c := make(map[string]string)
+	return GetStringMapStringTemplatedDefault(section, param, c)
+}
+
+// GetIntSlice returns []int or default.
+func GetIntSlice(section string, param string, def []int) []int {
+	if val := viper.GetIntSlice(fmt.Sprintf("%v.%v", section, param)); val != nil && len(val) > 0 {
+		return val
+	}
+	return def
+}
+
+func GetStringMapStringTemplatedFromMap(section string, param string, from map[string]string) map[string]string {
+	c := make(map[string]string)
+	return GetStringMapStringTemplatedFromMapDefault(section, param, from, c)
+}
+
+func GetStringMapStringTemplatedFromMapDefault(section string, param string, from map[string]string, def map[string]string) map[string]string {
+	c := make(map[string]string)
+	for k, v := range def {
+		c[k] = v
+	}
+	params := viper.GetStringMapString(fmt.Sprintf("%s.%s", section, param))
+	for k, v := range params {
+
+		var tplBytes bytes.Buffer
+		// WARNING: will panic:
+		// tpl := template.Must(template.New("params").Parse(v))
+		// we can preserve failed templated string
+		c[k] = v
+		tpl, err1 := template.New("params").Parse(v)
+		if err1 != nil {
+			continue
+		}
+		err := tpl.Execute(&tplBytes, from)
+		if err != nil {
+			log.Tracef("Failed params executing template: %s from : %v", err, from)
+			continue
+		}
+		c[k] = tplBytes.String()
+	}
+	return c
+}
+
+// GetTimeDuration return delay for the section with default of 1 second.
+// Example config:
+// section:
+//     interval: 5s
+func GetTimeDurationDefault(section string, param string, def time.Duration) (interval time.Duration) {
+	var comp time.Duration
+
+	for _, k := range []string{fmt.Sprintf("%v.%v.%v", section, param, CFG_INTERVAL_PARAMETER),
+		fmt.Sprintf("%v.%v", section, param), section, CFG_INTERVAL_PARAMETER} {
+		delay := viper.GetDuration(k)
+		if delay > comp && delay.Milliseconds() > 0 {
+			return delay
+		}
+	}
+	return def
+}
+
+func ConvertMapStringToInterface(in map[string]string) map[string]interface{} {
+	out := make(map[string]interface{})
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }

@@ -1,8 +1,9 @@
 module github.com/weldpua2008/supraworker
 
-go 1.12
+go 1.15
 
 require (
+	github.com/cenkalti/backoff/v4 v4.1.0
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/prometheus/client_golang v0.9.3
 	github.com/sirupsen/logrus v1.2.0

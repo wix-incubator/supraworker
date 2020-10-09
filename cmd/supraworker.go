@@ -7,16 +7,17 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	config "github.com/weldpua2008/supraworker/config"
+	heartbeat "github.com/weldpua2008/supraworker/heartbeat"
 	job "github.com/weldpua2008/supraworker/job"
 	metrics "github.com/weldpua2008/supraworker/metrics"
 	model "github.com/weldpua2008/supraworker/model"
 	worker "github.com/weldpua2008/supraworker/worker"
-
 	"os"
 	"os/signal"
 	"sync"
@@ -112,14 +113,20 @@ var rootCmd = &cobra.Command{
 			}
 		}()
 
-		go func() {
-			if err := model.StartHeartBeat(ctx, apiCallDelaySeconds); err != nil {
-				log.Tracef("StartGenerateJobs returned error %v", err)
-			}
-		}()
+		config.C.NumWorkers = 0
 		for w := 1; w <= numWorkers; w++ {
 			wg.Add(1)
+			config.C.NumWorkers += 1
 			go worker.StartWorker(w, jobs, &wg)
+		}
+		heartbeat_section := "heartbeat"
+		if config.GetBool(fmt.Sprintf("%v.enable", heartbeat_section)) {
+			go func() {
+				if err := heartbeat.StartHeartBeat(ctx, heartbeat_section, apiCallDelaySeconds); err != nil {
+					log.Tracef("StartHeartBeat returned error %v", err)
+				}
+			}()
+
 		}
 
 		wg.Wait()

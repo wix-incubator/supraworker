@@ -1,4 +1,4 @@
-package model
+package heartbeat
 
 import (
 	"bytes"
@@ -48,18 +48,20 @@ func TestHeartBeatApi(t *testing.T) {
 	viper.SetConfigType("yaml")
 	var yamlExample = []byte(`
     heartbeat:
-      update: &update
-        url: "` + srv.URL + `"
-        method: post
-        params:
-          "id": "` + want + `"
+        enable: true
+        communicators:
+            default:
+                url: "` + srv.URL + `"
+                method: post
+                params:
+                  "id": "` + want + `"
     `)
 
 	if err := viper.ReadConfig(bytes.NewBuffer(yamlExample)); err != nil {
 		t.Errorf("Can't read config: %v\n", err)
 	}
 	go func() {
-		if err := StartHeartBeat(ctx, 100*time.Millisecond); err != nil {
+		if err := StartHeartBeat(ctx, "heartbeat", 100*time.Millisecond); err != nil {
 			log.Warnf("StartHeartBeat returned error %v", err)
 		}
 	}()

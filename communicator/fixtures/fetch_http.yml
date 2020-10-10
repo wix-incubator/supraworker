@@ -1,0 +1,44 @@
+clientId: "clientId"
+version: "1.0"
+get:
+    communicator:
+        type: "http"
+        method: "GET"
+        params:
+            k: "{{ .ClientId }}"
+            c: c
+
+http_capital:
+    communicator:
+        type: "HTTP"
+        params:
+            k: value
+
+broken:
+    communicator:
+        type: "broken"
+
+GetCommunicatorsFromSection:
+    get:
+        communicators:
+            one:
+                type: "http"
+                method: "GET"
+                params:
+                    key: "{{ .ClientId }}"
+                    c: c
+                    k: "value"
+                    param: "{{.Param}}"
+
+    http_capital:
+        communicators:
+            two:
+                type: "HTTP"
+                method: "GET"
+                params:
+                    k: "value"
+
+    broken:
+        communicators:
+            -:
+            type: "broken"

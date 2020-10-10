@@ -1,4 +1,5 @@
 ### TODO List
+l. Capacity reporter - send to remote API
 l. Heartbeat
 l. Dump current load to remote API/DataStore
 l. Pre & Post CMD actions

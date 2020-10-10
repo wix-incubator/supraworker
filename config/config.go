@@ -170,7 +170,7 @@ func GetStringTemplatedDefault(section string, def string) string {
 
 // GetMapStringMapStringTemplatedDefault returns map of [string]string maps templated & enriched by default.
 func GetMapStringMapStringTemplatedDefault(section string, param string, def map[string]string) map[string]map[string]string {
-	ret := make(map[string]map[string]string, 0)
+	ret := make(map[string]map[string]string)
 	sections_values := viper.GetStringMap(fmt.Sprintf("%s.%s", section, param))
 	for subsection, section_value := range sections_values {
 		if section_value == nil {
@@ -249,7 +249,7 @@ func GetStringMapStringTemplated(section string, param string) map[string]string
 
 // GetIntSlice returns []int or default.
 func GetIntSlice(section string, param string, def []int) []int {
-	if val := viper.GetIntSlice(fmt.Sprintf("%v.%v", section, param)); val != nil && len(val) > 0 {
+	if val := viper.GetIntSlice(fmt.Sprintf("%v.%v", section, param)); len(val) > 0 {
 		return val
 	}
 	return def

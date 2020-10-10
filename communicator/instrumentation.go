@@ -3,7 +3,7 @@ package communicator
 import (
 	epsagonhttp "github.com/epsagon/epsagon-go/wrappers/net/http"
 	"net/http"
-    "time"
+	"time"
 )
 
 func SetHttpClientWrapper(f func() *http.Client) {

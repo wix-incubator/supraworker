@@ -19,7 +19,6 @@ func LoadCfgForTests(t *testing.T, CfgFile string) (Config, Config) {
 	tmp := C
 
 	C = Config{}
-	CfgFile = CfgFile
 	viper.SetConfigFile(CfgFile)
 	// t.Logf("Loaded: %v", CfgFile)
 	if err := viper.ReadInConfig(); err != nil {

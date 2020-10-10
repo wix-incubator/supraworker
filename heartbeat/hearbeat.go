@@ -22,7 +22,7 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 			comms = append(comms, comm)
 		}
 	}
-	param := make(map[string]interface{}, 0)
+	param := make(map[string]interface{})
 
 	if err != nil {
 		return fmt.Errorf("%w", communicator.ErrNoSuitableCommunicator)
@@ -52,7 +52,7 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 				config.C.NumActiveJobs = worker.NumActiveJobs
 				config.C.NumFreeSlots = config.C.NumWorkers - config.C.NumActiveJobs
 				for _, comm := range comms {
-					comm.Configure(param)
+					_ = comm.Configure(param)
 					res, err := comm.Fetch(clusterCtx, param)
 					if err != nil {
 						log.Tracef("Can't send healthcheck %v got %v", err, res)

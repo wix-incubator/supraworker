@@ -53,8 +53,8 @@ func NewRestCommunicator() Communicator {
 // NewRestCommunicator prepare struct communicator for HTTP requests
 func NewConfiguredRestCommunicator(section string) (Communicator, error) {
 	comm := NewRestCommunicator()
-	var cfg_params map[string]interface{}
-	cfg_params = utils.ConvertMapStringToInterface(
+	// var cfg_params map[string]interface{}
+	cfg_params := utils.ConvertMapStringToInterface(
 		config.GetStringMapStringTemplated(section, config.CFG_PREFIX_COMMUNICATOR))
 	if _, ok := cfg_params["section"]; !ok {
 		cfg_params["section"] = fmt.Sprintf("%s.%s", section, config.CFG_PREFIX_COMMUNICATOR)

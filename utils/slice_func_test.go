@@ -16,10 +16,6 @@ func BenchmarkContainsInts(b *testing.B) {
 }
 
 func benchmarkContainsIntsHelper(f func([]int, int) bool, b *testing.B) {
-	max := b.N
-	if max > 10000 {
-		max = 10000
-	}
 	in := make([]int, b.N+extraNumbers)
 	for i := 0; i < b.N+extraNumbers; i++ {
 		in[i] = i

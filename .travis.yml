@@ -29,7 +29,7 @@ before_deploy:
   - git tag $TRAVIS_TAG || true
 
   - go get github.com/laher/goxc
-  - goxc -tasks 'xc archive' -bc 'linux,darwin/686' -d "$RELEASES_PATH" -resources-include 'README*' -build-ldflags="-X github.com/weldpua2008/supraworker/cmd.GitCommit=${TRAVIS_TAG} "
+  - goxc -tasks 'xc archive' -bc 'darwin linux' -d "$RELEASES_PATH" -resources-include 'README*' -build-ldflags="-X github.com/weldpua2008/supraworker/cmd.GitCommit=${TRAVIS_TAG} "
 
 deploy:
   skip_cleanup: true

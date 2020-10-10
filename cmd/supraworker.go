@@ -133,16 +133,16 @@ var rootCmd = &cobra.Command{
 		}
 		heartbeat_section := "heartbeat"
 		if config.GetBool(fmt.Sprintf("%v.enable", heartbeat_section)) {
-
+			heartbeatApiCallDelaySeconds := config.GetTimeDurationDefault(heartbeat_section, "interval", apiCallDelaySeconds)
 			if epsagonTraceFlag {
 				go func() {
-					if err := epsagon.ConcurrentGoWrapper(epsagonConfig, heartbeat.StartHeartBeat)(heartbeat_section, apiCallDelaySeconds); err != nil {
+					if err := epsagon.ConcurrentGoWrapper(epsagonConfig, heartbeat.StartHeartBeat)(heartbeat_section, heartbeatApiCallDelaySeconds); err != nil {
 						log.Tracef("StartHeartBeat returned error %v", err)
 					}
 				}()
 			} else {
 				go func() {
-					if err := heartbeat.StartHeartBeat(ctx, heartbeat_section, apiCallDelaySeconds); err != nil {
+					if err := heartbeat.StartHeartBeat(ctx, heartbeat_section, heartbeatApiCallDelaySeconds); err != nil {
 						log.Tracef("StartHeartBeat returned error %v", err)
 					}
 				}()

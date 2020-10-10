@@ -2,11 +2,10 @@ package worker
 
 import (
 	"fmt"
-	"sync"
-	"time"
-	// worker "github.com/weldpua2008/supraworker/worker"
 	"github.com/weldpua2008/supraworker/job"
 	"github.com/weldpua2008/supraworker/model"
+	"sync"
+	"time"
 )
 
 // StartWorker run goroutine for executing commands and reporting to your API
@@ -21,7 +20,10 @@ func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
 
 	log.Info(fmt.Sprintf("Starting worker %v", id))
 	for j := range jobs {
-		log.Trace(fmt.Sprintf("Worker %v received Job %v address %p", id, j.Id, &j))
+		log.Trace(fmt.Sprintf("Worker %v received Job %v", id, j.Id))
+		mu.Lock()
+		NumActiveJobs += 1
+		mu.Unlock()
 		if err := j.Run(); err != nil {
 			log.Info(fmt.Sprintf("Job %v failed with %s", j.Id, err))
 			if errFlushBuf := j.FlushSteamsBuffer(); errFlushBuf != nil {
@@ -39,6 +41,10 @@ func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
 			jobsSucceeded.Inc()
 			jobsDuration.Observe(dur.Seconds())
 		}
+		mu.Lock()
+		NumActiveJobs -= 1
+		mu.Unlock()
+
 		jobsProcessed.Inc()
 		job.JobsRegistry.Delete(j.StoreKey())
 

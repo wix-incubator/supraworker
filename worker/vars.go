@@ -4,9 +4,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sirupsen/logrus"
+	"sync"
 )
 
 var (
+	// Number of active jobs
+	NumActiveJobs int
+
+	mu            sync.RWMutex
 	log           = logrus.WithFields(logrus.Fields{"package": "worker"})
 	jobsProcessed = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "supraworker_processed_jobs_total",

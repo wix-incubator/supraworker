@@ -3,9 +3,9 @@ package heartbeat
 import (
 	"context"
 	"fmt"
-	communicator "github.com/weldpua2008/supraworker/communicator"
-	// config "github.com/weldpua2008/supraworker/config"
-	// utils "github.com/weldpua2008/supraworker/config"
+	"github.com/weldpua2008/supraworker/communicator"
+	"github.com/weldpua2008/supraworker/config"
+	"github.com/weldpua2008/supraworker/worker"
 	"time"
 )
 
@@ -22,6 +22,7 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 			comms = append(comms, comm)
 		}
 	}
+	param := make(map[string]interface{}, 0)
 
 	if err != nil {
 		return fmt.Errorf("%w", communicator.ErrNoSuitableCommunicator)
@@ -46,35 +47,20 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 				return
 			case <-tickerSendHeartBeats.C:
 
-				// param := utils.ConvertMapStringToInterface(
-				// 	config.GetStringMapStringTemplated(section, config.CFG_PREFIX_COMMUNICATORS))
-				param := make(map[string]interface{}, 0)
-				clusterCtx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
-				// log.Tracef("param %v" , param)
+				clusterCtx, cancel := context.WithTimeout(ctx, time.Duration(15)*time.Second)
 				defer cancel() // cancel when we are getting the kill signal or exit
-
+				config.C.NumActiveJobs = worker.NumActiveJobs
+				config.C.NumFreeSlots = config.C.NumWorkers - config.C.NumActiveJobs
 				for _, comm := range comms {
 					comm.Configure(param)
-					// if err:=comm.Configure(param);err != nil {
-					//     log.Tracef("comm.Configure %v => %v", comm, err)
-					//
-					// }
-					// log.Tracef( "param %v in comm", param, comm)
 					res, err := comm.Fetch(clusterCtx, param)
 					if err != nil {
 						log.Tracef("Can't send healthcheck %v got %v", err, res)
+						hbFailed += 1
 						continue
 					}
+					hbAll += 1
 				}
-				// stage := "heartbeat.update"
-				// if urlProvided(stage) {
-				// 	params := GetAPIParamsFromSection(stage)
-				// 	if errApi, result := DoApiCall(ctx, params, stage); errApi != nil {
-				// 		log.Tracef("failed to update api, got: %s and %s\n", result, errApi)
-				// 		hbFailed += 1
-				// 	}
-				// 	hbAll += 1
-				// }
 			}
 		}
 	}()

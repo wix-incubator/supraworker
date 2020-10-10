@@ -19,10 +19,8 @@ import (
 func IsTerminalStatus(status string) bool {
 	switch status {
 	case JOB_STATUS_ERROR, JOB_STATUS_CANCELED, JOB_STATUS_SUCCESS:
-		log.Tracef("IsTerminalStatus %s true", status)
 		return true
 	}
-	log.Tracef("IsTerminalStatus %s false", status)
 	return false
 }
 
@@ -231,14 +229,12 @@ func (j *Job) resetCounterLoop(ctx context.Context, after time.Duration) {
 		case <-ctx.Done():
 			_ = j.doSendSteamBuf()
 			// j.notifyLogSent <- struct{}{}
-
-			log.Tracef("resetCounterLoop finished for '%v'", j.Id)
+			// log.Tracef("resetCounterLoop finished for '%v'", j.Id)
 			return
 		case <-j.notifyStopStreams:
 			_ = j.doSendSteamBuf()
 			// j.notifyLogSent <- struct{}{}
-
-			log.Tracef("resetCounterLoop finished for '%v'", j.Id)
+			// log.Tracef("resetCounterLoop finished for '%v'", j.Id)
 			return
 		case <-ticker.C:
 
@@ -417,7 +413,7 @@ func (j *Job) runcmd() error {
 	if err == nil {
 		signaled := ws.Signaled()
 		signal := ws.Signal()
-		log.Tracef("Error: %v", err)
+		// log.Tracef("Error: %v", err)
 		if signaled {
 			log.Tracef("Signal: %v", signal)
 			err = fmt.Errorf("Signal: %v", signal)

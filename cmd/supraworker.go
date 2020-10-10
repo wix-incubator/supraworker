@@ -109,7 +109,7 @@ var rootCmd = &cobra.Command{
 		})
 		var epsagonConfig *epsagon.Config
 		if epsagonTraceFlag {
-			epsagonConfig = epsagon.NewTracerConfig(fmt.Sprintf("supraworker-%v", config.C.ClientId), "")
+			epsagonConfig = epsagon.NewTracerConfig(fmt.Sprintf("supraworker-%v", config.C.ClientId), config.GetStringDefault("epsagon_token", ""))
 			epsagonConfig.Debug = true
 			communicator.SetEpsagonHttpWrapper()
 		}

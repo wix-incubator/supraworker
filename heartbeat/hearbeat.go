@@ -18,8 +18,7 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 	if err != nil {
 		comm, err1 := communicator.GetSectionCommunicator(section)
 		if err1 == nil {
-			comms := make([]communicator.Communicator, 0)
-			comms = append(comms, comm)
+			comms = []communicator.Communicator{comm}
 		}
 	}
 	param := make(map[string]interface{})

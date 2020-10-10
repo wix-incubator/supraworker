@@ -215,7 +215,8 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 		req.Header.Set(k, v)
 	}
 
-	client := &http.Client{Timeout: time.Duration(15 * time.Second)}
+	// client := &http.Client{Timeout: time.Duration(15 * time.Second)}
+	client := globalHttpClient
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w got %s", ErrFailedSendRequest, err)

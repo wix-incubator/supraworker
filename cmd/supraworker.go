@@ -16,8 +16,10 @@ import (
 	heartbeat "github.com/weldpua2008/supraworker/heartbeat"
 	job "github.com/weldpua2008/supraworker/job"
 	metrics "github.com/weldpua2008/supraworker/metrics"
+    communicator "github.com/weldpua2008/supraworker/communicator"
 	model "github.com/weldpua2008/supraworker/model"
 	worker "github.com/weldpua2008/supraworker/worker"
+    "github.com/epsagon/epsagon-go/epsagon"
 	"os"
 	"os/signal"
 	"sync"
@@ -28,6 +30,7 @@ import (
 var (
 	verbose    bool
 	traceFlag  bool
+    epsagonTraceFlag  bool
 	log            = logrus.WithFields(logrus.Fields{"package": "cmd"})
 	numWorkers int = 5
 )
@@ -37,6 +40,8 @@ func init() {
 	// Define Persistent Flags and configuration settings, which, if defined here,
 	// will be global for application.
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose")
+    rootCmd.PersistentFlags().BoolVarP(&epsagonTraceFlag, "epsagon", "e", false, "Enable Epsagon Tracing")
+
 	rootCmd.PersistentFlags().BoolVarP(&traceFlag, "trace", "t", false, "trace")
 	rootCmd.PersistentFlags().StringVar(&config.ClientId, "clientId", "", "ClientId (default is supraworker)")
 
@@ -102,6 +107,13 @@ var rootCmd = &cobra.Command{
 			}
 			config.ReinitializeConfig()
 		})
+        var epsagonConfig *epsagon.Config
+        if epsagonTraceFlag {
+            epsagonConfig = epsagon.NewTracerConfig(fmt.Sprintf("supraworker-%v", config.C.ClientId), "")
+            epsagonConfig.Debug = true
+            communicator.SetEpsagonHttpWrapper()
+        }
+
 		addr := config.GetStringTemplatedDefault("healthcheck.listen", ":8080")
 		healthcheck_uri := config.GetStringTemplatedDefault("healthcheck.uri", "/health/is_alive")
 		srv := metrics.StartHealthCheck(addr, healthcheck_uri)
@@ -121,11 +133,21 @@ var rootCmd = &cobra.Command{
 		}
 		heartbeat_section := "heartbeat"
 		if config.GetBool(fmt.Sprintf("%v.enable", heartbeat_section)) {
-			go func() {
-				if err := heartbeat.StartHeartBeat(ctx, heartbeat_section, apiCallDelaySeconds); err != nil {
-					log.Tracef("StartHeartBeat returned error %v", err)
-				}
-			}()
+
+            if epsagonTraceFlag {
+                go func() {
+                    if err := epsagon.ConcurrentGoWrapper(epsagonConfig, heartbeat.StartHeartBeat)(heartbeat_section, apiCallDelaySeconds); err != nil {
+                        log.Tracef("StartHeartBeat returned error %v", err)
+                    }
+                }()
+            }else {
+                go func() {
+                    if err := heartbeat.StartHeartBeat(ctx, heartbeat_section, apiCallDelaySeconds); err != nil {
+                        log.Tracef("StartHeartBeat returned error %v", err)
+                    }
+                }()
+            }
+
 
 		}
 

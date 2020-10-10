@@ -3,6 +3,8 @@ package communicator
 import (
 	"errors"
 	"github.com/sirupsen/logrus"
+	"net/http"
+	"time"
 )
 
 var (
@@ -18,7 +20,8 @@ var (
 	ErrNotAllowedResponseCode  = errors.New("Not allowed response code")
 
 	// internal
-	log = logrus.WithFields(logrus.Fields{"package": "communicator"})
+	log              = logrus.WithFields(logrus.Fields{"package": "communicator"})
+	globalHttpClient = &http.Client{Timeout: time.Duration(15 * time.Second)}
 )
 
 // String constants representing each communicator type.

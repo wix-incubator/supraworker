@@ -112,6 +112,10 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 								if i, err := strconv.ParseInt(fmt.Sprintf("%v", value), 10, 64); err == nil {
 									TTR = uint64((time.Duration(i) * time.Second).Milliseconds())
 								}
+							case "ttl_minutes", "ttr_minutes", "ttl_min", "ttr_min":
+								if i, err := strconv.ParseInt(fmt.Sprintf("%v", value), 10, 64); err == nil {
+									TTR = uint64((time.Duration(i) * time.Minute).Milliseconds())
+								}
 							case "stopDate", "stopdate", "stop_date", "stop":
 								if i, err := strconv.ParseInt(fmt.Sprintf("%v", value), 10, 64); err == nil {
 									now := time.Now()
@@ -138,7 +142,7 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 						job.SetContext(ctx)
 						if TTR < 1 {
 
-							TTR = uint64((time.Duration(3600) * time.Second).Milliseconds())
+							TTR = uint64((time.Duration(8*3600) * time.Second).Milliseconds())
 						}
 						job.TTR = TTR
 						if JobsRegistry.Add(job) {

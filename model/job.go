@@ -380,7 +380,7 @@ func (j *Job) runcmd() error {
 		}
 		for scanner.Scan() {
 			msg := scanner.Text()
-            _ = j.AppendLogStream([]string{ msg, "\n"})
+			_ = j.AppendLogStream([]string{msg, "\n"})
 		}
 
 		if scanner.Err() != nil {

@@ -192,6 +192,7 @@ func (j *Job) Failed() error {
 //  for job
 // update your API
 func (j *Job) AppendLogStream(logStream []string) error {
+
 	if j.quotaHit() {
 		<-j.notify
 		_ = j.doSendSteamBuf()
@@ -329,13 +330,13 @@ func (j *Job) runcmd() error {
 		return fmt.Errorf("cmd.StderrPipe, %s", err)
 	}
 
-	log.Tracef("Run cmd: %v\n", j.cmd)
 	err = j.cmd.Start()
 	j.mu.Lock()
 	if errUpdate := j.updateStatus(JOB_STATUS_IN_PROGRESS); errUpdate != nil {
 		log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, JOB_STATUS_IN_PROGRESS)
 	}
 	j.mu.Unlock()
+	log.Tracef("Run cmd: %v [%v]\n", j.cmd, j.cmd.Process.Pid)
 	// update API
 	stage := "jobs.run"
 	if errApi, result := DoApiCall(j.ctx, j.GetAPIParams(stage), stage); errApi != nil {
@@ -361,10 +362,23 @@ func (j *Job) runcmd() error {
 			notifyStdoutSent <- true
 		}()
 		scanner := bufio.NewScanner(stdout)
+		scanner.Split(bufio.ScanLines)
+
+		buf := make([]byte, 0, 64*1024)
+		// The second argument to scanner.Buffer() sets the maximum token size.
+		// We will be able to scan the stdout as long as none of the lines is
+		// larger than 1MB.
+		scanner.Buffer(buf, bufio.MaxScanTokenSize)
+		if stdout == nil {
+			return
+		}
 		for scanner.Scan() {
 			msg := scanner.Text()
-			// log.Tracef("stdout: %s\n", msg)
-			_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", msg)})
+			_ = j.AppendLogStream([]string{msg})
+		}
+
+		if scanner.Err() != nil {
+			log.Tracef("Stdout %v unexpected failure: %v", j.Id, scanner.Err())
 		}
 	}()
 	// parse stderr
@@ -373,20 +387,38 @@ func (j *Job) runcmd() error {
 		defer func() {
 			notifyStderrSent <- true
 		}()
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			msg := scanner.Text()
-			// log.Tracef("stderr: %s\n", msg)
-			_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", msg)})
-		}
-	}()
 
+		stdErrScanner := bufio.NewScanner(stderr)
+		// stdErrScanner.Split(bufio.ScanWords)
+		stdErrScanner.Split(bufio.ScanLines)
+		buf := make([]byte, 0, 64*1024)
+		// The second argument to scanner.Buffer() sets the maximum token size.
+		// We will be able to scan the stdout as long as none of the lines is
+		// larger than 1MB.
+
+		stdErrScanner.Buffer(buf, bufio.MaxScanTokenSize)
+		if stderr == nil {
+			return
+		}
+
+		stdErrScanner.Split(bufio.ScanLines)
+
+		for stdErrScanner.Scan() {
+			msg := stdErrScanner.Text()
+			_ = j.AppendLogStream([]string{msg})
+		}
+		if stdErrScanner.Err() != nil {
+			log.Tracef("Stderr %v unexpected failure: %v", j.Id, stdErrScanner.Err())
+		}
+
+	}()
 	<-notifyStdoutSent
 	<-notifyStderrSent
 
 	// The returned error is nil if the command runs, has
 	// no problems copying stdin, stdout, and stderr,
 	// and exits with a zero exit status.
+	// log.Tracef("cmd.Wait %v", j.Id)
 	err = j.cmd.Wait()
 	if err != nil {
 		log.Tracef("cmd.Wait for '%v' returned error: %v", j.Id, err)

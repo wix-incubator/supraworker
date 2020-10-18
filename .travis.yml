@@ -1,7 +1,7 @@
 language: go
 
 go:
-  - 1.14.x
+  - 1.12.x
 
 # Don't email me the results of the test runs.
 notifications:

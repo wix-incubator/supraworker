@@ -132,7 +132,7 @@ func (j *Job) Cancel() error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if !IsTerminalStatus(j.Status) {
-		log.Trace(fmt.Sprintf("Call Canceled for Job %s", j.Id))
+		log.Tracef("Call Canceled for Job %s", j.Id)
 		if j.cmd != nil && j.cmd.Process != nil {
 			if err := j.cmd.Process.Kill(); err != nil {
 				return fmt.Errorf("failed to kill process: %s", err)
@@ -150,9 +150,10 @@ func (j *Job) Cancel() error {
 			log.Tracef("failed to update api, got: %s and %s", result, err)
 		}
 
-	} else {
-		log.Trace(fmt.Sprintf("Job %s in terminal '%s' status ", j.Id, j.Status))
 	}
+	// else {
+	// 	log.Trace(fmt.Sprintf("Job %s in terminal '%s' status ", j.Id, j.Status))
+	// }
 	return nil
 }
 

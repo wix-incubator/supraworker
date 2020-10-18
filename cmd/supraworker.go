@@ -8,12 +8,12 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/epsagon/epsagon-go/epsagon"
+	// "github.com/epsagon/epsagon-go/epsagon"
 	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	communicator "github.com/weldpua2008/supraworker/communicator"
+	// communicator "github.com/weldpua2008/supraworker/communicator"
 	config "github.com/weldpua2008/supraworker/config"
 	heartbeat "github.com/weldpua2008/supraworker/heartbeat"
 	job "github.com/weldpua2008/supraworker/job"
@@ -28,11 +28,11 @@ import (
 )
 
 var (
-	verbose          bool
-	traceFlag        bool
-	epsagonTraceFlag bool
-	log                  = logrus.WithFields(logrus.Fields{"package": "cmd"})
-	numWorkers       int = 5
+	verbose   bool
+	traceFlag bool
+	// epsagonTraceFlag bool
+	log            = logrus.WithFields(logrus.Fields{"package": "cmd"})
+	numWorkers int = 5
 )
 
 func init() {
@@ -40,7 +40,7 @@ func init() {
 	// Define Persistent Flags and configuration settings, which, if defined here,
 	// will be global for application.
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose")
-	rootCmd.PersistentFlags().BoolVarP(&epsagonTraceFlag, "epsagon", "e", false, "Enable Epsagon Tracing")
+	// rootCmd.PersistentFlags().BoolVarP(&epsagonTraceFlag, "epsagon", "e", false, "Enable Epsagon Tracing")
 
 	rootCmd.PersistentFlags().BoolVarP(&traceFlag, "trace", "t", false, "trace")
 	rootCmd.PersistentFlags().StringVar(&config.ClientId, "clientId", "", "ClientId (default is supraworker)")
@@ -107,12 +107,12 @@ var rootCmd = &cobra.Command{
 			}
 			config.ReinitializeConfig()
 		})
-		var epsagonConfig *epsagon.Config
-		if epsagonTraceFlag {
-			epsagonConfig = epsagon.NewTracerConfig(fmt.Sprintf("supraworker-%v", config.C.ClientId), config.GetStringDefault("epsagon_token", ""))
-			epsagonConfig.Debug = true
-			communicator.SetEpsagonHttpWrapper()
-		}
+		// var epsagonConfig *epsagon.Config
+		// if epsagonTraceFlag {
+		// 	epsagonConfig = epsagon.NewTracerConfig(fmt.Sprintf("supraworker-%v", config.C.ClientId), config.GetStringDefault("epsagon_token", ""))
+		// 	epsagonConfig.Debug = true
+		// 	communicator.SetEpsagonHttpWrapper()
+		// }
 
 		addr := config.GetStringTemplatedDefault("healthcheck.listen", ":8080")
 		healthcheck_uri := config.GetStringTemplatedDefault("healthcheck.uri", "/health/is_alive")
@@ -134,19 +134,19 @@ var rootCmd = &cobra.Command{
 		heartbeat_section := "heartbeat"
 		if config.GetBool(fmt.Sprintf("%v.enable", heartbeat_section)) {
 			heartbeatApiCallDelaySeconds := config.GetTimeDurationDefault(heartbeat_section, "interval", apiCallDelaySeconds)
-			if epsagonTraceFlag {
-				go func() {
-					if err := epsagon.ConcurrentGoWrapper(epsagonConfig, heartbeat.StartHeartBeat)(heartbeat_section, heartbeatApiCallDelaySeconds); err != nil {
-						log.Tracef("StartHeartBeat returned error %v", err)
-					}
-				}()
-			} else {
-				go func() {
-					if err := heartbeat.StartHeartBeat(ctx, heartbeat_section, heartbeatApiCallDelaySeconds); err != nil {
-						log.Tracef("StartHeartBeat returned error %v", err)
-					}
-				}()
-			}
+			// if epsagonTraceFlag {
+			// 	go func() {
+			// 		if err := epsagon.ConcurrentGoWrapper(epsagonConfig, heartbeat.StartHeartBeat)(heartbeat_section, heartbeatApiCallDelaySeconds); err != nil {
+			// 			log.Tracef("StartHeartBeat returned error %v", err)
+			// 		}
+			// 	}()
+			// } else {
+			go func() {
+				if err := heartbeat.StartHeartBeat(ctx, heartbeat_section, heartbeatApiCallDelaySeconds); err != nil {
+					log.Tracef("StartHeartBeat returned error %v", err)
+				}
+			}()
+			// }
 
 		}
 

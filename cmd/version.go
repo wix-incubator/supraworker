@@ -22,7 +22,7 @@ var GitCommit string
 
 const (
 	// Version defines main version number
-	Version = "0.2.4"
+	Version = "0.2.5"
 
 	// VersionPrerelease is pre-release marker for the version
 	// such as "dev" (in development), "beta", "rc1", etc.

@@ -336,13 +336,13 @@ func (j *Job) runcmd() error {
 		log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, JOB_STATUS_IN_PROGRESS)
 	}
 	j.mu.Unlock()
-    if err != nil && j.cmd.Process != nil {
-        log.Tracef("Run cmd: %v [%v]\n", j.cmd, j.cmd.Process.Pid)
+	if err != nil && j.cmd.Process != nil {
+		log.Tracef("Run cmd: %v [%v]\n", j.cmd, j.cmd.Process.Pid)
 
-    }else {
-        log.Tracef("Run cmd: %v\n", j.cmd)
+	} else {
+		log.Tracef("Run cmd: %v\n", j.cmd)
 
-    }
+	}
 	// update API
 	stage := "jobs.run"
 	if errApi, result := DoApiCall(j.ctx, j.GetAPIParams(stage), stage); errApi != nil {

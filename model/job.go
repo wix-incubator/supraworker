@@ -380,7 +380,7 @@ func (j *Job) runcmd() error {
 		}
 		for scanner.Scan() {
 			msg := scanner.Text()
-			_ = j.AppendLogStream([]string{msg})
+            _ = j.AppendLogStream([]string{ msg, "\n"})
 		}
 
 		if scanner.Err() != nil {
@@ -411,7 +411,7 @@ func (j *Job) runcmd() error {
 
 		for stdErrScanner.Scan() {
 			msg := stdErrScanner.Text()
-			_ = j.AppendLogStream([]string{msg})
+			_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", msg)})
 		}
 		if stdErrScanner.Err() != nil {
 			log.Tracef("Stderr %v unexpected failure: %v", j.Id, stdErrScanner.Err())

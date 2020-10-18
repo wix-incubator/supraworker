@@ -30,7 +30,7 @@ import (
 var (
 	verbose          bool
 	traceFlag        bool
-	epsagonTraceFlag bool
+	// epsagonTraceFlag bool
 	log                  = logrus.WithFields(logrus.Fields{"package": "cmd"})
 	numWorkers       int = 5
 )

@@ -9,7 +9,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+    "strings"
 	"time"
+    "github.com/sirupsen/logrus"
+
 )
 
 // TODO:
@@ -91,6 +94,72 @@ func TestStreamApi(t *testing.T) {
 		t.Errorf("want %s, got %v", want, got)
 	}
 }
+
+
+// TODO: test on 655361
+func TestLongLineStreamApi(t *testing.T) {
+	repeats:= 65531
+    // repeats:= 655361
+	want := fmt.Sprintf("{\"job_uid\":\"job_uid\",\"msg\":\"'%v'\\n\",\"run_uid\":\"1\"}", strings.Repeat("a", repeats))
+	var got string
+	notifyStdoutSent := make(chan bool)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		fmt.Fprintln(w, "{}")
+		b, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("ReadAll %s", err)
+		}
+		got = string(fmt.Sprintf("%s", b))
+		notifyStdoutSent <- true
+	}))
+    logrus.SetLevel(logrus.TraceLevel)
+	defer func() {
+		srv.Close()
+		// StreamingAPIURL = ""
+		restoreLevel()
+	}()
+	// cmdtest.StartTrace()
+	// StreamingAPIURL = srv.URL
+	viper.SetConfigType("yaml")
+	var yamlExample = []byte(`
+    jobs:
+      logstream: &update
+        url: "` + srv.URL + `"
+        method: post
+        params:
+          "job_uid": "job_uid"
+          "run_uid": "1"
+    `)
+	if err := viper.ReadConfig(bytes.NewBuffer(yamlExample)); err != nil {
+		t.Errorf("Can't read config: %v\n", err)
+	}
+
+	job := NewTestJob(fmt.Sprintf("job-%v", cmdtest.GetFunctionName(t.Name)), cmdtest.CMDForTest(fmt.Sprintf("generate %v&&exit 0",repeats)))
+	job.StreamInterval = 1 * time.Millisecond
+	job.ExtraRunUID = "1"
+	job.RunUID = "1"
+    job.ResetBackPresureTimer = time.Duration(450)* time.Millisecond
+	err := job.Run()
+	if err != nil {
+		t.Errorf("Expected no error in %s, got '%v'\n", cmdtest.GetFunctionName(t.Name), err)
+	}
+	select {
+	case <-notifyStdoutSent:
+		log.Trace("notifyStdoutSent")
+	case <-time.After(5 * time.Second):
+		t.Errorf("timed out")
+	}
+
+	if job.GetStatus() != JOB_STATUS_SUCCESS {
+		t.Errorf("Expected %s, got %s\n", JOB_STATUS_SUCCESS, job.Status)
+	}
+
+	if got != want {
+		t.Errorf("want %s, got %v", want, got)
+	}
+}
+
 
 func TestExecuteJobSuccess(t *testing.T) {
 	job := NewTestJob(fmt.Sprintf("job-%v", cmdtest.GetFunctionName(t.Name)), cmdtest.CMDForTest("echo  &&exit 0"))

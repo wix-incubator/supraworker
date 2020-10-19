@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+    "io/ioutil"
 )
 
 // IsTerminalStatus returns true if status is terminal:
@@ -45,7 +46,7 @@ type Job struct {
 	CMD            string    // Comamand
 	CmdENV         []string  // Comamand
 	RunAs          string    // RunAs defines user
-
+    ResetBackPresureTimer time.Duration // how often we will dump the logs
 	StreamInterval time.Duration
 	mu             sync.RWMutex
 	exitError      error
@@ -357,6 +358,9 @@ func (j *Job) runcmd() error {
 
 	// reset backpresure counter
 	per := 5 * time.Second
+    if  j.ResetBackPresureTimer.Nanoseconds() > 0{
+        per = j.ResetBackPresureTimer
+    }
 	resetCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go j.resetCounterLoop(resetCtx, per)
@@ -367,7 +371,8 @@ func (j *Job) runcmd() error {
 		defer func() {
 			notifyStdoutSent <- true
 		}()
-		scanner := bufio.NewScanner(stdout)
+        stdOutBuf := bufio.NewReader(stdout)
+		scanner := bufio.NewScanner(stdOutBuf)
 		scanner.Split(bufio.ScanLines)
 
 		buf := make([]byte, 0, 64*1024)
@@ -379,12 +384,24 @@ func (j *Job) runcmd() error {
 			return
 		}
 		for scanner.Scan() {
+            if errScan := scanner.Err(); errScan != nil {
+                stdOutBuf.Reset(stdout)
+            }
+
 			msg := scanner.Text()
 			_ = j.AppendLogStream([]string{msg, "\n"})
 		}
 
 		if scanner.Err() != nil {
-			log.Tracef("Stdout %v unexpected failure: %v", j.Id, scanner.Err())
+            // stdout.Close()
+			// log.Tracef("Stdout %v unexpected failure: %v", j.Id, scanner.Err())
+            b, err := ioutil.ReadAll(stdout)
+        	if err == nil {
+        		_ = j.AppendLogStream([]string{string(b), "\n"})
+        	}else {
+                log.Tracef("Stdout ReadAll %v unexpected failure: %v", j.Id, err)
+
+            }
 		}
 	}()
 	// parse stderr
@@ -415,6 +432,14 @@ func (j *Job) runcmd() error {
 		}
 		if stdErrScanner.Err() != nil {
 			log.Tracef("Stderr %v unexpected failure: %v", j.Id, stdErrScanner.Err())
+            b, err := ioutil.ReadAll(stderr)
+            if err == nil {
+                _ = j.AppendLogStream([]string{string(b), "\n"})
+            }else {
+                log.Tracef("Stderr ReadAll %v unexpected failure: %v", j.Id, err)
+
+            }
+
 		}
 
 	}()

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -101,6 +102,7 @@ func TestHelperProcess(t *testing.T) {
 	// cmd := args[3]
 
 	re := regexp.MustCompile(`echo (.+?)`)
+	reGenerator := regexp.MustCompile(`generate ([0-9]+)`)
 	// Handle the case where args[0] is dir:...
 	// TODO: Further Validation
 	// if !strings.Contains(strings.Join(args, " "), "bash") {
@@ -119,9 +121,20 @@ func TestHelperProcess(t *testing.T) {
 		// fmt.Fprintf(os.Stdout, "Sleep for 10 seconds")
 		time.Sleep(10 * time.Second)
 	}
-	res := re.FindStringSubmatch(strings.Join(args, " "))
 	out := ""
-	if len(res) > 1 {
+	resGenerator := reGenerator.FindStringSubmatch(strings.Join(args, " "))
+	res := re.FindStringSubmatch(strings.Join(args, " "))
+
+	if len(resGenerator) > 1 {
+		n := resGenerator[1]
+		if i, err := strconv.Atoi(n); err == nil {
+			out = strings.Repeat("a", i)
+
+		} else {
+			out = n
+		}
+		// fmt.Fprintf(os.Stdout, n)
+	} else if len(res) > 1 {
 		out = res[1]
 	}
 

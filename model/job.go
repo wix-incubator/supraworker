@@ -5,12 +5,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os/exec"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-    "io/ioutil"
 )
 
 // IsTerminalStatus returns true if status is terminal:
@@ -32,27 +32,27 @@ func StoreKey(Id string, RunUID string, ExtraRunUID string) string {
 
 // Job public structure
 type Job struct {
-	Id             string    // Identificator for Job
-	RunUID         string    // Running indentification
-	ExtraRunUID    string    // Extra indentification
-	Priority       int64     // Priority for a Job
-	CreateAt       time.Time // When Job was created
-	StartAt        time.Time // When command started
-	LastActivityAt time.Time // When job metadata last changed
-	Status         string    // Currentl status
-	MaxAttempts    int       // Absoulute max num of attempts.
-	MaxFails       int       // Absolute max number of failures.
-	TTR            uint64    // Time-to-run in Millisecond
-	CMD            string    // Comamand
-	CmdENV         []string  // Comamand
-	RunAs          string    // RunAs defines user
-    ResetBackPresureTimer time.Duration // how often we will dump the logs
-	StreamInterval time.Duration
-	mu             sync.RWMutex
-	exitError      error
-	ExitCode       int // Exit code
-	cmd            *exec.Cmd
-	ctx            context.Context
+	Id                    string        // Identificator for Job
+	RunUID                string        // Running indentification
+	ExtraRunUID           string        // Extra indentification
+	Priority              int64         // Priority for a Job
+	CreateAt              time.Time     // When Job was created
+	StartAt               time.Time     // When command started
+	LastActivityAt        time.Time     // When job metadata last changed
+	Status                string        // Currentl status
+	MaxAttempts           int           // Absoulute max num of attempts.
+	MaxFails              int           // Absolute max number of failures.
+	TTR                   uint64        // Time-to-run in Millisecond
+	CMD                   string        // Comamand
+	CmdENV                []string      // Comamand
+	RunAs                 string        // RunAs defines user
+	ResetBackPresureTimer time.Duration // how often we will dump the logs
+	StreamInterval        time.Duration
+	mu                    sync.RWMutex
+	exitError             error
+	ExitCode              int // Exit code
+	cmd                   *exec.Cmd
+	ctx                   context.Context
 
 	// params got from your API
 	RawParams []map[string]interface{}
@@ -358,9 +358,9 @@ func (j *Job) runcmd() error {
 
 	// reset backpresure counter
 	per := 5 * time.Second
-    if  j.ResetBackPresureTimer.Nanoseconds() > 0{
-        per = j.ResetBackPresureTimer
-    }
+	if j.ResetBackPresureTimer.Nanoseconds() > 0 {
+		per = j.ResetBackPresureTimer
+	}
 	resetCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go j.resetCounterLoop(resetCtx, per)
@@ -371,7 +371,7 @@ func (j *Job) runcmd() error {
 		defer func() {
 			notifyStdoutSent <- true
 		}()
-        stdOutBuf := bufio.NewReader(stdout)
+		stdOutBuf := bufio.NewReader(stdout)
 		scanner := bufio.NewScanner(stdOutBuf)
 		scanner.Split(bufio.ScanLines)
 
@@ -384,24 +384,24 @@ func (j *Job) runcmd() error {
 			return
 		}
 		for scanner.Scan() {
-            if errScan := scanner.Err(); errScan != nil {
-                stdOutBuf.Reset(stdout)
-            }
+			if errScan := scanner.Err(); errScan != nil {
+				stdOutBuf.Reset(stdout)
+			}
 
 			msg := scanner.Text()
 			_ = j.AppendLogStream([]string{msg, "\n"})
 		}
 
 		if scanner.Err() != nil {
-            // stdout.Close()
+			// stdout.Close()
 			// log.Tracef("Stdout %v unexpected failure: %v", j.Id, scanner.Err())
-            b, err := ioutil.ReadAll(stdout)
-        	if err == nil {
-        		_ = j.AppendLogStream([]string{string(b), "\n"})
-        	}else {
-                log.Tracef("Stdout ReadAll %v unexpected failure: %v", j.Id, err)
+			b, err := ioutil.ReadAll(stdout)
+			if err == nil {
+				_ = j.AppendLogStream([]string{string(b), "\n"})
+			} else {
+				log.Tracef("Stdout ReadAll %v unexpected failure: %v", j.Id, err)
 
-            }
+			}
 		}
 	}()
 	// parse stderr
@@ -432,13 +432,13 @@ func (j *Job) runcmd() error {
 		}
 		if stdErrScanner.Err() != nil {
 			log.Tracef("Stderr %v unexpected failure: %v", j.Id, stdErrScanner.Err())
-            b, err := ioutil.ReadAll(stderr)
-            if err == nil {
-                _ = j.AppendLogStream([]string{string(b), "\n"})
-            }else {
-                log.Tracef("Stderr ReadAll %v unexpected failure: %v", j.Id, err)
+			b, err := ioutil.ReadAll(stderr)
+			if err == nil {
+				_ = j.AppendLogStream([]string{string(b), "\n"})
+			} else {
+				log.Tracef("Stderr ReadAll %v unexpected failure: %v", j.Id, err)
 
-            }
+			}
 
 		}
 

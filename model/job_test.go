@@ -3,16 +3,15 @@ package model
 import (
 	"bytes"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/weldpua2008/supraworker/model/cmdtest"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
-    "strings"
 	"time"
-    "github.com/sirupsen/logrus"
-
 )
 
 // TODO:
@@ -95,11 +94,10 @@ func TestStreamApi(t *testing.T) {
 	}
 }
 
-
 // TODO: test on 655361
 func TestLongLineStreamApi(t *testing.T) {
-	repeats:= 65531
-    // repeats:= 655361
+	repeats := 65531
+	// repeats:= 655361
 	want := fmt.Sprintf("{\"job_uid\":\"job_uid\",\"msg\":\"'%v'\\n\",\"run_uid\":\"1\"}", strings.Repeat("a", repeats))
 	var got string
 	notifyStdoutSent := make(chan bool)
@@ -113,7 +111,7 @@ func TestLongLineStreamApi(t *testing.T) {
 		got = string(fmt.Sprintf("%s", b))
 		notifyStdoutSent <- true
 	}))
-    logrus.SetLevel(logrus.TraceLevel)
+	logrus.SetLevel(logrus.TraceLevel)
 	defer func() {
 		srv.Close()
 		// StreamingAPIURL = ""
@@ -135,11 +133,11 @@ func TestLongLineStreamApi(t *testing.T) {
 		t.Errorf("Can't read config: %v\n", err)
 	}
 
-	job := NewTestJob(fmt.Sprintf("job-%v", cmdtest.GetFunctionName(t.Name)), cmdtest.CMDForTest(fmt.Sprintf("generate %v&&exit 0",repeats)))
+	job := NewTestJob(fmt.Sprintf("job-%v", cmdtest.GetFunctionName(t.Name)), cmdtest.CMDForTest(fmt.Sprintf("generate %v&&exit 0", repeats)))
 	job.StreamInterval = 1 * time.Millisecond
 	job.ExtraRunUID = "1"
 	job.RunUID = "1"
-    job.ResetBackPresureTimer = time.Duration(450)* time.Millisecond
+	job.ResetBackPresureTimer = time.Duration(450) * time.Millisecond
 	err := job.Run()
 	if err != nil {
 		t.Errorf("Expected no error in %s, got '%v'\n", cmdtest.GetFunctionName(t.Name), err)
@@ -159,7 +157,6 @@ func TestLongLineStreamApi(t *testing.T) {
 		t.Errorf("want %s, got %v", want, got)
 	}
 }
-
 
 func TestExecuteJobSuccess(t *testing.T) {
 	job := NewTestJob(fmt.Sprintf("job-%v", cmdtest.GetFunctionName(t.Name)), cmdtest.CMDForTest("echo  &&exit 0"))

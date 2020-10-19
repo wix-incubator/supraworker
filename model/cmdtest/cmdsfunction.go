@@ -126,14 +126,14 @@ func TestHelperProcess(t *testing.T) {
 	res := re.FindStringSubmatch(strings.Join(args, " "))
 
 	if len(resGenerator) > 1 {
-        n:=resGenerator[1]
+		n := resGenerator[1]
 		if i, err := strconv.Atoi(n); err == nil {
 			out = strings.Repeat("a", i)
 
-		}else {
-            out = n
-        }
-        // fmt.Fprintf(os.Stdout, n)
+		} else {
+			out = n
+		}
+		// fmt.Fprintf(os.Stdout, n)
 	} else if len(res) > 1 {
 		out = res[1]
 	}

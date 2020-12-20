@@ -140,7 +140,7 @@ func TestGenerateJobs(t *testing.T) {
 			}
 		}
 		if !foundEnv {
-			t.Errorf("Expected %v, got %v", true, foundEnv)
+			t.Errorf("Expected found %v, got %v", true, foundEnv)
 		}
 
 	}

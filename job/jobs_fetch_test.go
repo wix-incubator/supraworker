@@ -46,7 +46,7 @@ func TestGenerateJobs(t *testing.T) {
 			CreateDate:  "createDate",
 			LastUpdated: "lastUpdated",
 			StopDate:    "stopDate",
-            EnvVar: []string{"EnvVar=1"},
+			EnvVar:      []string{"EnvVar=1"},
 		},
 		{
 			JobId:       "job_id",
@@ -59,7 +59,7 @@ func TestGenerateJobs(t *testing.T) {
 			CreateDate:  "createDate",
 			LastUpdated: "lastUpdated",
 			StopDate:    "stopDate",
-            EnvVar: []string{"EnvVar=1"},
+			EnvVar:      []string{"EnvVar=1"},
 		},
 	}
 
@@ -133,13 +133,13 @@ func TestGenerateJobs(t *testing.T) {
 		if len(responses) == 1 {
 			cancel()
 		}
-        foundEnv := false
-        for _, v := range job.CmdENV {
-            if "EnvVar=1" == v {
-                foundEnv = true
-            }
-        }
-        if !foundEnv {
+		foundEnv := false
+		for _, v := range job.CmdENV {
+			if "EnvVar=1" == v {
+				foundEnv = true
+			}
+		}
+		if !foundEnv {
 			t.Errorf("Expected %v, got %v", true, foundEnv)
 		}
 

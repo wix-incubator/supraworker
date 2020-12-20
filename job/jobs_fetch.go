@@ -49,7 +49,7 @@ type ApiJobResponse struct {
 	CreateDate  string   `json:"createDate"`
 	LastUpdated string   `json:"lastUpdated"`
 	StopDate    string   `json:"stopDate"`
-    EnvVar      []string `json:"env"`
+	EnvVar      []string `json:"env"`
 }
 
 // NewApiJobRequest prepare struct for Jobs for execution request
@@ -102,7 +102,7 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 						var RunUID string
 						var ExtraRunUID string
 						var TTR uint64
-                        var EnvVar []string
+						var EnvVar []string
 
 						for key, value := range jobResponse {
 							switch strings.ToLower(key) {
@@ -129,21 +129,21 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 								}
 							case "runid", "runuid", "run_id", "run_uid":
 								RunUID = fmt.Sprintf("%v", value)
-                            // Excpects list of string or string in key=value format
-                            case "env", "vars", "environment":
-                                if env, ok := value.([]string); ok {
-                                    EnvVar =  env
-                                }  else if env, ok := value.(string); ok {
-                                    EnvVar = []string{env}
-                                }else if value_of_slice, ok := value.([]interface{}); ok {
-                                    for _, elem := range value_of_slice {
-                                        if env, ok := elem.(string); ok {
-                                            EnvVar = append(EnvVar, env)
-                                        }
-                                    }
+							// Excpects list of string or string in key=value format
+							case "env", "vars", "environment":
+								if env, ok := value.([]string); ok {
+									EnvVar = env
+								} else if env, ok := value.(string); ok {
+									EnvVar = []string{env}
+								} else if value_of_slice, ok := value.([]interface{}); ok {
+									for _, elem := range value_of_slice {
+										if env, ok := elem.(string); ok {
+											EnvVar = append(EnvVar, env)
+										}
+									}
 
-                                }
-                                fmt.Printf("!!!EnvVar %v\n", EnvVar)
+								}
+								fmt.Printf("!!!EnvVar %v\n", EnvVar)
 
 							case "extrarunid", "extrarunuid", "extrarun_id", "extrarun_uid", "extra_run_id", "extra_run_uid":
 								ExtraRunUID = fmt.Sprintf("%v", value)
@@ -169,7 +169,7 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 							j += 1
 							log.Trace(fmt.Sprintf("sent job id %v ", job.Id))
 						}
-                        job.CmdENV = EnvVar
+						job.CmdENV = EnvVar
 						// else {
 						// 	log.Trace(fmt.Sprintf("Duplicated job id %v ", job.Id))
 						// }

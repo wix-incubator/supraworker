@@ -143,8 +143,6 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 									}
 
 								}
-								fmt.Printf("!!!EnvVar %v\n", EnvVar)
-
 							case "extrarunid", "extrarunuid", "extrarun_id", "extrarun_uid", "extra_run_id", "extra_run_uid":
 								ExtraRunUID = fmt.Sprintf("%v", value)
 							}

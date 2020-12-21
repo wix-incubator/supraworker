@@ -128,6 +128,7 @@ func TestGenerateJobs(t *testing.T) {
         t.Errorf("timed out")
     }
 	for job := range jobs {
+        time.Sleep(50*time.Millisecond)
 		if job.Status != model.JOB_STATUS_PENDING {
 			t.Errorf("Expected %s, got %s", model.JOB_STATUS_PENDING, job.Status)
 		}

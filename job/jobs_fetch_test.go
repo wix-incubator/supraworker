@@ -63,7 +63,7 @@ func TestGenerateJobs(t *testing.T) {
 		},
 	}
 
-	// notifyStdoutSent := make(chan bool)
+	notifyStdoutSent := make(chan bool)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		var c ApiJobResponse
@@ -89,7 +89,7 @@ func TestGenerateJobs(t *testing.T) {
 			t.Errorf("ReadAll %s", err)
 		}
 		got = string(fmt.Sprintf("%s", b))
-		// notifyStdoutSent <- true
+		notifyStdoutSent <- true
 	}))
 	defer func() {
 		srv.Close()
@@ -116,10 +116,17 @@ func TestGenerateJobs(t *testing.T) {
 	jobs := make(chan *model.Job, 1)
 
 	go func() {
-		if err := StartGenerateJobs(ctx, jobs, time.Duration(5)*time.Second); err != nil {
+		if err := StartGenerateJobs(ctx, jobs, time.Duration(50)*time.Millisecond); err != nil {
 			log.Infof("StartGenerateJobs failed %v", err)
 		}
 	}()
+
+    select {
+    case <-notifyStdoutSent:
+        log.Trace("notifyStdoutSent")
+    case <-time.After(1 * time.Second):
+        t.Errorf("timed out")
+    }
 	for job := range jobs {
 		if job.Status != model.JOB_STATUS_PENDING {
 			t.Errorf("Expected %s, got %s", model.JOB_STATUS_PENDING, job.Status)
@@ -134,6 +141,7 @@ func TestGenerateJobs(t *testing.T) {
 			cancel()
 		}
 		foundEnv := false
+        time.Sleep(100*time.Millisecond)
 		for _, v := range job.CmdENV {
 			if "EnvVar=1" == v {
 				foundEnv = true

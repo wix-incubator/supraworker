@@ -29,7 +29,8 @@ func MergeEnvVars(CmdENVs []string) (uniqueMergedENV []string) {
 	mergedENV = append(mergedENV, DefaultPath())
 	unique := make(map[string]bool, len(mergedENV))
 	for indx := range mergedENV {
-		if len(strings.Split(mergedENV[indx], "=")) != 2 {
+
+		if len(strings.Split(mergedENV[indx], "=")) < 2 {
 			continue
 		}
 		k := strings.Split(mergedENV[indx], "=")[0]
@@ -37,9 +38,6 @@ func MergeEnvVars(CmdENVs []string) (uniqueMergedENV []string) {
 			uniqueMergedENV = append(uniqueMergedENV, mergedENV[indx])
 			unique[k] = true
 		}
-		// if strings.HasPrefix(j.cmd.Env[indx],"PATH="){
-		//     j.cmd.Env[indx]
-		// }
 	}
 	return
 }

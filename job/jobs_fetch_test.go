@@ -121,14 +121,14 @@ func TestGenerateJobs(t *testing.T) {
 		}
 	}()
 
-    select {
-    case <-notifyStdoutSent:
-        log.Trace("notifyStdoutSent")
-    case <-time.After(1 * time.Second):
-        t.Errorf("timed out")
-    }
+	select {
+	case <-notifyStdoutSent:
+		log.Trace("notifyStdoutSent")
+	case <-time.After(1 * time.Second):
+		t.Errorf("timed out")
+	}
 	for job := range jobs {
-        time.Sleep(50*time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 		if job.Status != model.JOB_STATUS_PENDING {
 			t.Errorf("Expected %s, got %s", model.JOB_STATUS_PENDING, job.Status)
 		}
@@ -142,7 +142,7 @@ func TestGenerateJobs(t *testing.T) {
 			cancel()
 		}
 		foundEnv := false
-        time.Sleep(100*time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		for _, v := range job.CmdENV {
 			if "EnvVar=1" == v {
 				foundEnv = true

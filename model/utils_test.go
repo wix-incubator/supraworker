@@ -76,7 +76,7 @@ func TestMergeEnvVarsBase64(t *testing.T) {
 	if !strings.Contains(joined, want) {
 		t.Errorf("want %s, got %v", want, got)
 	}
-	os.Setenv("SUPRAWORKER_T", fmt.Sprintf("%s", sEnc))
+	os.Setenv("SUPRAWORKER_T", sEnc)
 	got = MergeEnvVars([]string{})
 	joined = strings.Join(got, ";")
 	if !strings.Contains(joined, want) {

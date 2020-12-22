@@ -1,8 +1,8 @@
 package model
 
 import (
+	b64 "encoding/base64"
 	"fmt"
-    b64 "encoding/base64"
 	"go.uber.org/goleak"
 	"os"
 	"runtime"
@@ -56,18 +56,18 @@ func TestMergeEnvVars(t *testing.T) {
 
 func TestMergeEnvVarsBase64(t *testing.T) {
 	defer func() {
-        os.Unsetenv("SUPRAWORKER_T")
+		os.Unsetenv("SUPRAWORKER_T")
 	}()
 	os.Unsetenv("SUPRAWORKER_T")
-    data := "abc123!?$*&()'-=@~"
-    sEnc := fmt.Sprintf("%s==",b64.StdEncoding.EncodeToString([]byte(data)))
+	data := "abc123!?$*&()'-=@~"
+	sEnc := fmt.Sprintf("%s==", b64.StdEncoding.EncodeToString([]byte(data)))
 	want := fmt.Sprintf("SUPRAWORKER_T=%s", sEnc)
 
-    joined := strings.Join(MergeEnvVars([]string{}), ";")
-    if strings.Contains(joined, want) {
-        t.Errorf("want '%s' be absent, got %v", want, joined)
-    }
-    //
+	joined := strings.Join(MergeEnvVars([]string{}), ";")
+	if strings.Contains(joined, want) {
+		t.Errorf("want '%s' be absent, got %v", want, joined)
+	}
+	//
 	got := MergeEnvVars([]string{want})
 	if len(got) < 1 {
 		t.Errorf("want len > 0 got %s", got)
@@ -76,9 +76,9 @@ func TestMergeEnvVarsBase64(t *testing.T) {
 	if !strings.Contains(joined, want) {
 		t.Errorf("want %s, got %v", want, got)
 	}
-    os.Setenv("SUPRAWORKER_T", fmt.Sprintf("%s",sEnc))
-    got = MergeEnvVars([]string{})
-    joined = strings.Join(got, ";")
+	os.Setenv("SUPRAWORKER_T", fmt.Sprintf("%s", sEnc))
+	got = MergeEnvVars([]string{})
+	joined = strings.Join(got, ";")
 	if !strings.Contains(joined, want) {
 		t.Errorf("want %s, got %v", want, got)
 	}

@@ -7,3 +7,4 @@ l. Pid file for process
 l. Retry API calls
 l. Add backoff
 l. Add Native Streaming API Clients (e.g. Supraworker -> Kinesis Streams -> Kinesis Firehose -> S3)
+l. Pre and post actions for command

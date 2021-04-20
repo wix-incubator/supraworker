@@ -15,7 +15,6 @@ import (
 // }
 
 func chooseHttpMethod(provided string, def string) string {
-	// log.Tracef("provided %v",provided)
 	provided = strings.ToUpper(provided)
 	switch provided {
 	case http.MethodGet:

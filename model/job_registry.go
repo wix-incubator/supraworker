@@ -82,15 +82,15 @@ func (r *Registry) Cleanup() (num int) {
 	return num
 }
 
-// GracefullShutdown is used when we stop the Registry.
+// GracefullyShutdown is used when we stop the Registry.
 // cancel all running & pending job
 // return false if we can't cancel any job
-func (r *Registry) GracefullShutdown() bool {
+func (r *Registry) GracefullyShutdown() bool {
 	r.Cleanup()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	failed := false
-	log.Debug("start GracefullShutdown")
+	log.Debug("start GracefullyShutdown")
 	for k, v := range r.all {
 		if !IsTerminalStatus(v.Status) {
 			if err := v.Cancel(); err != nil {

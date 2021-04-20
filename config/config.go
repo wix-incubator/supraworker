@@ -25,7 +25,7 @@ const (
 
 // Config is top level Configuration structure
 type Config struct {
-	// Indentification for the process
+	// Identification for the process
 	ClientId      string `mapstructure:"clientId"`
 	NumActiveJobs int    // Number of jobs
 	NumFreeSlots  int    // Number of free jobs slots
@@ -74,7 +74,7 @@ type UrlConf struct {
 var (
 	// CfgFile defines Path to the config
 	CfgFile string
-	// ClientId defines Indentification for the instance.
+	// ClientId defines Identification for the instance.
 	ClientId string
 	// C defines main configuration structure.
 	C Config = Config{

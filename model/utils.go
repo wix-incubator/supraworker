@@ -28,14 +28,14 @@ func MergeEnvVars(CmdENVs []string) (uniqueMergedENV []string) {
 	mergedENV := append(CmdENVs, os.Environ()...)
 	mergedENV = append(mergedENV, DefaultPath())
 	unique := make(map[string]bool, len(mergedENV))
-	for indx := range mergedENV {
+	for index := range mergedENV {
 
-		if len(strings.Split(mergedENV[indx], "=")) < 2 {
+		if len(strings.Split(mergedENV[index], "=")) < 2 {
 			continue
 		}
-		k := strings.Split(mergedENV[indx], "=")[0]
+		k := strings.Split(mergedENV[index], "=")[0]
 		if _, ok := unique[k]; !ok {
-			uniqueMergedENV = append(uniqueMergedENV, mergedENV[indx])
+			uniqueMergedENV = append(uniqueMergedENV, mergedENV[index])
 			unique[k] = true
 		}
 	}
@@ -44,7 +44,7 @@ func MergeEnvVars(CmdENVs []string) (uniqueMergedENV []string) {
 
 // CmdWrapper wraps command.
 func CmdWrapper(RunAs string, UseSHELL bool, CMD string) (shell string, args []string) {
-	cmdSplitted := strings.Fields(CMD)
+	cmdSplit := strings.Fields(CMD)
 	if len(RunAs) > 1 {
 		shell = "sudo"
 		args = []string{"-u", RunAs, CMD}
@@ -60,8 +60,8 @@ func CmdWrapper(RunAs string, UseSHELL bool, CMD string) (shell string, args []s
 		}
 
 	} else if useCmdAsIs(CMD) {
-		shell = cmdSplitted[0]
-		args = cmdSplitted[1:]
+		shell = cmdSplit[0]
+		args = cmdSplit[1:]
 	} else if UseSHELL {
 		shell = "sh"
 		args = []string{"-c", CMD}
@@ -84,8 +84,8 @@ func CmdWrapper(RunAs string, UseSHELL bool, CMD string) (shell string, args []s
 			}
 		}
 	} else {
-		shell = cmdSplitted[0]
-		args = cmdSplitted[1:]
+		shell = cmdSplit[0]
+		args = cmdSplit[1:]
 	}
 	return
 }
@@ -102,21 +102,21 @@ func fileExists(filename string) bool {
 
 // useCmdAsIs returns true if cmd has shell
 func useCmdAsIs(CMD string) bool {
-	cmdSplitted := strings.Fields(CMD)
+	cmdSplit := strings.Fields(CMD)
 
-	if (len(cmdSplitted) > 0) && (fileExists(cmdSplitted[0])) {
+	if (len(cmdSplit) > 0) && (fileExists(cmdSplit[0])) {
 		// in case of bash
-		if strings.HasSuffix(cmdSplitted[0], "bash") {
+		if strings.HasSuffix(cmdSplit[0], "bash") {
 			return true
 			// in case su or sudo
-			// } else if strings.HasSuffix(cmdSplitted[0], "su") || strings.HasSuffix(cmdSplitted[0], "sudo") {
+			// } else if strings.HasSuffix(cmdSplit[0], "su") || strings.HasSuffix(cmdSplit[0], "sudo") {
 			// 	return true
-		} else if cmdSplitted[0] == "/bin/bash" || cmdSplitted[0] == "/bin/sh" {
+		} else if cmdSplit[0] == "/bin/bash" || cmdSplit[0] == "/bin/sh" {
 			return true
 		}
-	} else if (cmdSplitted[0] == "bash") || (cmdSplitted[0] == "sh") {
+	} else if (cmdSplit[0] == "bash") || (cmdSplit[0] == "sh") {
 		return true
-		// } else if (cmdSplitted[0] == "sudo") || (cmdSplitted[0] == "su") {
+		// } else if (cmdSplit[0] == "sudo") || (cmdSplit[0] == "su") {
 		// 	return true
 	}
 	return false
@@ -128,7 +128,7 @@ func urlProvided(stage string) bool {
 }
 
 // prepare context for Job.
-func prepareContaxt(jobCtx context.Context, ttr uint64) (context.Context, context.CancelFunc) {
+func prepareContext(jobCtx context.Context, ttr uint64) (context.Context, context.CancelFunc) {
 	var ctx context.Context
 	var cancel context.CancelFunc
 	// in case we have time limitation or context

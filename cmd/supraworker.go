@@ -63,21 +63,21 @@ var rootCmd = &cobra.Command{
                 Complete documentation is available at github.com/weldpua2008/supraworker/cmd`,
 	Version: FormattedVersion(),
 	Run: func(cmd *cobra.Command, args []string) {
-		sigs := make(chan os.Signal, 1)
-		shutchan := make(chan bool, 1)
-		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-		// signal.Notify(sigs, os.Interrupt)
-		//    signal.Notify(sigs, os.Kill)
+		stopChan := make(chan os.Signal, 1)
+		shutdownChan := make(chan bool, 1)
+		signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
+		// signal.Notify(stopChan, os.Interrupt)
+		//    signal.Notify(stopChan, os.Kill)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel() // cancel when we are getting the kill signal or exit
 		var wg sync.WaitGroup
 		jobs := make(chan *model.Job, 1)
 		log.Infof("Starting Supraworker\n")
 		go func() {
-			sig := <-sigs
+			sig := <-stopChan
 			log.Infof("Shutting down - got %v signal", sig)
 			cancel()
-			shutchan <- true
+			shutdownChan <- true
 		}()
 
 		if traceFlag {
@@ -92,7 +92,7 @@ var rootCmd = &cobra.Command{
 			delay = 1
 		}
 
-		apiCallDelaySeconds := time.Duration(delay) * time.Second
+		apiCallDelay := time.Duration(delay) * time.Second
 
 		// load config
 		if errCnf := model.ReinitializeConfig(); errCnf != nil {
@@ -115,12 +115,12 @@ var rootCmd = &cobra.Command{
 		// }
 
 		addr := config.GetStringTemplatedDefault("healthcheck.listen", ":8080")
-		healthcheck_uri := config.GetStringTemplatedDefault("healthcheck.uri", "/health/is_alive")
-		srv := metrics.StartHealthCheck(addr, healthcheck_uri)
+		healthCheckURI := config.GetStringTemplatedDefault("healthcheck.uri", "/health/is_alive")
+		srv := metrics.StartHealthCheck(addr, healthCheckURI)
 		defer metrics.WaitForShutdown(ctx, srv)
 
 		go func() {
-			if err := job.StartGenerateJobs(ctx, jobs, apiCallDelaySeconds); err != nil {
+			if err := job.StartGenerateJobs(ctx, jobs, apiCallDelay); err != nil {
 				log.Tracef("StartGenerateJobs returned error %v", err)
 			}
 		}()
@@ -131,9 +131,9 @@ var rootCmd = &cobra.Command{
 			config.C.NumWorkers += 1
 			go worker.StartWorker(w, jobs, &wg)
 		}
-		heartbeat_section := "heartbeat"
-		if config.GetBool(fmt.Sprintf("%v.enable", heartbeat_section)) {
-			heartbeatApiCallDelaySeconds := config.GetTimeDurationDefault(heartbeat_section, "interval", apiCallDelaySeconds)
+		heartbeatSection := "heartbeat"
+		if config.GetBool(fmt.Sprintf("%v.enable", heartbeatSection)) {
+			heartbeatApiCallDelay := config.GetTimeDurationDefault(heartbeatSection, "interval", apiCallDelay)
 			// if epsagonTraceFlag {
 			// 	go func() {
 			// 		if err := epsagon.ConcurrentGoWrapper(epsagonConfig, heartbeat.StartHeartBeat)(heartbeat_section, heartbeatApiCallDelaySeconds); err != nil {
@@ -142,7 +142,7 @@ var rootCmd = &cobra.Command{
 			// 	}()
 			// } else {
 			go func() {
-				if err := heartbeat.StartHeartBeat(ctx, heartbeat_section, heartbeatApiCallDelaySeconds); err != nil {
+				if err := heartbeat.StartHeartBeat(ctx, heartbeatSection, heartbeatApiCallDelay); err != nil {
 					log.Tracef("StartHeartBeat returned error %v", err)
 				}
 			}()

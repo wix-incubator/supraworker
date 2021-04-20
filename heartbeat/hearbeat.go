@@ -14,11 +14,11 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 
 	chanSentHeartBeats := make(chan int, 1)
 	chanFailedToSentHeartBeats := make(chan int, 1)
-	comms, err := communicator.GetCommunicatorsFromSection(section)
+	communicators, err := communicator.GetCommunicatorsFromSection(section)
 	if err != nil {
 		comm, err1 := communicator.GetSectionCommunicator(section)
 		if err1 == nil {
-			comms = []communicator.Communicator{comm}
+			communicators = []communicator.Communicator{comm}
 		}
 	}
 	param := make(map[string]interface{})
@@ -29,10 +29,10 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 	log.Info(fmt.Sprintf("Starting heartbeat with delay %v", interval))
 
 	go func() {
-		tickerSendHeartBeats := time.NewTicker(interval)
+		tickerHeartBeats := time.NewTicker(interval)
 
 		defer func() {
-			tickerSendHeartBeats.Stop()
+			tickerHeartBeats.Stop()
 		}()
 
 		hbAll := 0
@@ -44,22 +44,25 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 				chanFailedToSentHeartBeats <- hbFailed
 				log.Debug("Heartbeat generation finished [ SUCCESSFULLY ]")
 				return
-			case <-tickerSendHeartBeats.C:
+			case <-tickerHeartBeats.C:
 
-				clusterCtx, cancel := context.WithTimeout(ctx, time.Duration(15)*time.Second)
-				defer cancel() // cancel when we are getting the kill signal or exit
-				config.C.NumActiveJobs = worker.NumActiveJobs
-				config.C.NumFreeSlots = config.C.NumWorkers - config.C.NumActiveJobs
-				for _, comm := range comms {
-					_ = comm.Configure(param)
-					res, err := comm.Fetch(clusterCtx, param)
-					if err != nil {
-						log.Tracef("Can't send healthcheck %v got %v", err, res)
-						hbFailed += 1
-						continue
+				func() {
+					clusterCtx, cancel := context.WithTimeout(ctx, time.Duration(15)*time.Second)
+					// TODO: wrap it in a function –either an anonymous or a named function
+					defer cancel() // cancel when we are getting the kill signal or exit
+					config.C.NumActiveJobs = worker.NumActiveJobs
+					config.C.NumFreeSlots = config.C.NumWorkers - config.C.NumActiveJobs
+					for _, comm := range communicators {
+						_ = comm.Configure(param)
+						res, err := comm.Fetch(clusterCtx, param)
+						if err != nil {
+							log.Tracef("Can't send healthcheck %v got %v", err, res)
+							hbFailed += 1
+							continue
+						}
+						hbAll += 1
 					}
-					hbAll += 1
-				}
+				}()
 			}
 		}
 	}()

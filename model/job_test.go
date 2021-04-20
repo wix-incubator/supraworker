@@ -137,7 +137,7 @@ func TestLongLineStreamApi(t *testing.T) {
 	job.StreamInterval = 1 * time.Millisecond
 	job.ExtraRunUID = "1"
 	job.RunUID = "1"
-	job.ResetBackPresureTimer = time.Duration(450) * time.Millisecond
+	job.ResetBackPressureTimer = time.Duration(450) * time.Millisecond
 	err := job.Run()
 	if err != nil {
 		t.Errorf("Expected no error in %s, got '%v'\n", cmdtest.GetFunctionName(t.Name), err)

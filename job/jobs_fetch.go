@@ -262,9 +262,9 @@ func GracefullShutdown(jobs <-chan *model.Job) bool {
 			<-jobs
 		}
 	}
-	JobsRegistry.GracefullShutdown()
+	JobsRegistry.GracefullyShutdown()
 	if JobsRegistry.Len() > 0 {
-		log.Trace(fmt.Sprintf("GracefullShutdown failed, '%v' jobs left ", JobsRegistry.Len()))
+		log.Trace(fmt.Sprintf("GracefullyShutdown failed, '%v' jobs left ", JobsRegistry.Len()))
 		return false
 	}
 	return true

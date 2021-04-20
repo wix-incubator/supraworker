@@ -54,16 +54,16 @@ func NewRestCommunicator() Communicator {
 func NewConfiguredRestCommunicator(section string) (Communicator, error) {
 	comm := NewRestCommunicator()
 	// var cfg_params map[string]interface{}
-	cfg_params := utils.ConvertMapStringToInterface(
+	cfgParams := utils.ConvertMapStringToInterface(
 		config.GetStringMapStringTemplated(section, config.CFG_PREFIX_COMMUNICATOR))
-	if _, ok := cfg_params["section"]; !ok {
-		cfg_params["section"] = fmt.Sprintf("%s.%s", section, config.CFG_PREFIX_COMMUNICATOR)
+	if _, ok := cfgParams["section"]; !ok {
+		cfgParams["section"] = fmt.Sprintf("%s.%s", section, config.CFG_PREFIX_COMMUNICATOR)
 	}
-	if _, ok := cfg_params["param"]; !ok {
-		cfg_params["param"] = config.CFG_COMMUNICATOR_PARAMS_KEY
+	if _, ok := cfgParams["param"]; !ok {
+		cfgParams["param"] = config.CFG_COMMUNICATOR_PARAMS_KEY
 	}
 
-	if err := comm.Configure(cfg_params); err != nil {
+	if err := comm.Configure(cfgParams); err != nil {
 		return nil, err
 	}
 
@@ -138,17 +138,17 @@ func (s *RestCommunicator) Fetch(ctx context.Context, params map[string]interfac
 	}
 	// log.Warningf( "Fetch  %v", params)
 	expBackoff := backoff.NewExponentialBackOff()
-	backoff_section := fmt.Sprintf("%v.%v", s.section, config.CFG_PREFIX_BACKOFF)
+	backoffSection := fmt.Sprintf("%v.%v", s.section, config.CFG_PREFIX_BACKOFF)
 
-	if val := config.GetTimeDurationDefault(backoff_section,
+	if val := config.GetTimeDurationDefault(backoffSection,
 		config.CFG_PREFIX_BACKOFF_INITIALINTERVAL, time.Second); val.Milliseconds() > 0 {
 		expBackoff.InitialInterval = val
 	}
-	if val := config.GetTimeDurationDefault(backoff_section,
+	if val := config.GetTimeDurationDefault(backoffSection,
 		config.CFG_PREFIX_BACKOFF_MAXINTERVAL, time.Second); val.Milliseconds() > 0 {
 		expBackoff.MaxInterval = val
 	}
-	if val := config.GetTimeDurationDefault(backoff_section,
+	if val := config.GetTimeDurationDefault(backoffSection,
 		config.CFG_PREFIX_BACKOFF_MAXELAPSEDTIME, time.Second); val.Milliseconds() > 0 {
 		expBackoff.MaxElapsedTime = val
 	}
@@ -161,11 +161,11 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 	var req *http.Request
 	var rawResponse map[string]interface{}
 
-	allowed_response_codes := config.GetIntSlice(s.section,
+	allowedResponseCodes := config.GetIntSlice(s.section,
 		config.CFG_PREFIX_ALLOWED_RESPONSE_CODES, []int{200, 201, 202})
 	if v := ctx.Value(CTX_ALLOWED_RESPONSE_CODES); v != nil {
 		if val, ok := v.([]int); ok {
-			allowed_response_codes = val
+			allowedResponseCodes = val
 		}
 	}
 
@@ -187,17 +187,17 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	all_params := config.GetStringMapStringTemplatedFromMap(s.section, s.param, from)
+	allParams := config.GetStringMapStringTemplatedFromMap(s.section, s.param, from)
 	// log.Infof("\nall_params %v\ns.section %v , %v, \nfrom: %v", all_params, s.section, s.param,from)
 
 	for k, v := range params {
 		if v1, ok := v.(string); ok {
-			all_params[k] = v1
+			allParams[k] = v1
 		}
 	}
 
-	if len(all_params) > 0 {
-		jsonStr, err = json.Marshal(&all_params)
+	if len(allParams) > 0 {
+		jsonStr, err = json.Marshal(&allParams)
 		if err != nil {
 			log.Tracef("\nFailed to marshal request %s  to %s \nwith %s\n", s.method, s.url, jsonStr)
 			return nil, fmt.Errorf("%w due %s", ErrFailedMarshalRequest, err)
@@ -227,8 +227,8 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 		return nil, fmt.Errorf("%w got %s", ErrFailedReadResponseBody, err)
 	}
 
-	if !utils.ContainsInts(allowed_response_codes, resp.StatusCode) {
-		return nil, fmt.Errorf("%w %v in %v got body %s", ErrNotAllowedResponseCode, resp.StatusCode, allowed_response_codes, body)
+	if !utils.ContainsInts(allowedResponseCodes, resp.StatusCode) {
+		return nil, fmt.Errorf("%w %v in %v got body %s", ErrNotAllowedResponseCode, resp.StatusCode, allowedResponseCodes, body)
 	}
 
 	err = json.Unmarshal(body, &result)

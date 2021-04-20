@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/mitchellh/go-ps"
 	"io/ioutil"
 	"os/exec"
 	"strings"
@@ -32,36 +33,36 @@ func StoreKey(Id string, RunUID string, ExtraRunUID string) string {
 
 // Job public structure
 type Job struct {
-	Id                    string        // Identificator for Job
-	RunUID                string        // Running indentification
-	ExtraRunUID           string        // Extra indentification
-	Priority              int64         // Priority for a Job
-	CreateAt              time.Time     // When Job was created
-	StartAt               time.Time     // When command started
-	LastActivityAt        time.Time     // When job metadata last changed
-	Status                string        // Currentl status
-	MaxAttempts           int           // Absoulute max num of attempts.
-	MaxFails              int           // Absolute max number of failures.
-	TTR                   uint64        // Time-to-run in Millisecond
-	CMD                   string        // Comamand
-	CmdENV                []string      // Comamand
-	RunAs                 string        // RunAs defines user
-	ResetBackPresureTimer time.Duration // how often we will dump the logs
-	StreamInterval        time.Duration
-	mu                    sync.RWMutex
-	exitError             error
-	ExitCode              int // Exit code
-	cmd                   *exec.Cmd
-	ctx                   context.Context
+	Id                     string        // Identification for Job
+	RunUID                 string        // Running identification
+	ExtraRunUID            string        // Extra identification
+	Priority               int64         // Priority for a Job
+	CreateAt               time.Time     // When Job was created
+	StartAt                time.Time     // When command started
+	LastActivityAt         time.Time     // When job metadata last changed
+	Status                 string        // Currently status
+	MaxAttempts            int           // Absolute max num of attempts.
+	MaxFails               int           // Absolute max number of failures.
+	TTR                    uint64        // Time-to-run in Millisecond
+	CMD                    string        // Command
+	CmdENV                 []string      // Command
+	RunAs                  string        // RunAs defines user
+	ResetBackPressureTimer time.Duration // how often we will dump the logs
+	StreamInterval         time.Duration
+	mu                     sync.RWMutex
+	exitError              error
+	ExitCode               int // Exit code
+	cmd                    *exec.Cmd
+	ctx                    context.Context
 
 	// params got from your API
 	RawParams []map[string]interface{}
-	// steram interface
+	// stream interface
 	elements          uint
 	notify            chan interface{}
 	notifyStopStreams chan interface{}
 	notifyLogSent     chan interface{}
-	stremMu           sync.Mutex
+	streamsMu         sync.Mutex
 	counter           uint
 	timeQuote         bool
 	// If we should use shell and wrap the command
@@ -115,10 +116,10 @@ func (j *Job) GetAPIParams(stage string) map[string]string {
 	resendParamsKeys := GetSliceParamsFromSection(stage, "resend-params")
 	// log.Tracef(" GetAPIParams(%s) params params %v\nresend-params %v\n", stage,params,resendParamsKeys)
 
-	for _, resandParamKey := range resendParamsKeys {
+	for _, resendParamKey := range resendParamsKeys {
 		for _, rawVal := range j.RawParams {
-			if val, ok := rawVal[resandParamKey]; ok {
-				c[resandParamKey] = fmt.Sprintf("%s", val)
+			if val, ok := rawVal[resendParamKey]; ok {
+				c[resendParamKey] = fmt.Sprintf("%s", val)
 			}
 		}
 	}
@@ -128,15 +129,33 @@ func (j *Job) GetAPIParams(stage string) map[string]string {
 }
 
 // Cancel job
-// update your API
+// It triggers an update for the your API if it's configured
 func (j *Job) Cancel() error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if !IsTerminalStatus(j.Status) {
 		log.Tracef("Call Canceled for Job %s", j.Id)
+		var processChildren []int
 		if j.cmd != nil && j.cmd.Process != nil {
+			processTree, errTree := NewProcessTree()
+			if errTree == nil {
+				processTree.Get(1)
+				processChildren = processTree.Get(j.cmd.Process.Pid)
+			} else {
+				log.Warnf("Can't form process tree, got %v", errTree)
+			}
 			if err := j.cmd.Process.Kill(); err != nil {
 				return fmt.Errorf("failed to kill process: %s", err)
+			}
+			if processList, err := ps.Processes(); err == nil {
+				for aux := range processList {
+					var process ps.Process
+					process = processList[aux]
+					if ContainsIntInIntSlice(processChildren, process.Pid()) {
+						log.Tracef("[Job %s] Killing PID: %d --> Name: %s --> ParentPID: %d", j.Id, process.Pid(), process.Executable(), process.PPid())
+						syscall.Kill(process.Pid(), syscall.SIGTERM)
+					}
+				}
 			}
 		}
 
@@ -199,16 +218,16 @@ func (j *Job) AppendLogStream(logStream []string) error {
 		_ = j.doSendSteamBuf()
 	}
 	j.incrementCounter()
-	j.stremMu.Lock()
+	j.streamsMu.Lock()
 	j.streamsBuf = append(j.streamsBuf, logStream...)
-	j.stremMu.Unlock()
+	j.streamsMu.Unlock()
 	return nil
 }
 
 //count next element
 func (j *Job) incrementCounter() {
-	j.stremMu.Lock()
-	defer j.stremMu.Unlock()
+	j.streamsMu.Lock()
+	defer j.streamsMu.Unlock()
 	j.counter++
 }
 
@@ -241,7 +260,7 @@ func (j *Job) resetCounterLoop(ctx context.Context, after time.Duration) {
 			return
 		case <-ticker.C:
 
-			j.stremMu.Lock()
+			j.streamsMu.Lock()
 			if j.quotaHit() {
 				// log.Tracef("doNotify for '%v'", j.Id)
 				j.timeQuote = false
@@ -249,12 +268,12 @@ func (j *Job) resetCounterLoop(ctx context.Context, after time.Duration) {
 
 			}
 			j.counter = 0
-			j.stremMu.Unlock()
+			j.streamsMu.Unlock()
 		case <-tickerTimeInterval.C:
 
-			j.stremMu.Lock()
+			j.streamsMu.Lock()
 			j.timeQuote = true
-			j.stremMu.Unlock()
+			j.streamsMu.Unlock()
 		// flush Buffer for slow logs
 		case <-tickerSlowLogsInterval.C:
 			_ = j.doSendSteamBuf()
@@ -277,8 +296,8 @@ func (j *Job) FlushSteamsBuffer() error {
 // doSendSteamBuf low-level functions which sends streams to the remote API
 // Send stream only if there is something
 func (j *Job) doSendSteamBuf() error {
-	j.stremMu.Lock()
-	defer j.stremMu.Unlock()
+	j.streamsMu.Lock()
+	defer j.streamsMu.Unlock()
 	if len(j.streamsBuf) > 0 {
 		// log.Tracef("doSendSteamBuf for '%v' len '%v' %v\n ", j.Id, len(j.streamsBuf),j.streamsBuf)
 
@@ -311,7 +330,7 @@ func (j *Job) doSendSteamBuf() error {
 // supports cancellation
 func (j *Job) runcmd() error {
 	j.mu.Lock()
-	ctx, cancel := prepareContaxt(j.ctx, j.TTR)
+	ctx, cancel := prepareContext(j.ctx, j.TTR)
 	defer cancel()
 	// Use shell wrapper
 	shell, args := CmdWrapper(j.RunAs, j.UseSHELL, j.CMD)
@@ -358,8 +377,8 @@ func (j *Job) runcmd() error {
 
 	// reset backpresure counter
 	per := 5 * time.Second
-	if j.ResetBackPresureTimer.Nanoseconds() > 0 {
-		per = j.ResetBackPresureTimer
+	if j.ResetBackPressureTimer.Nanoseconds() > 0 {
+		per = j.ResetBackPressureTimer
 	}
 	resetCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()

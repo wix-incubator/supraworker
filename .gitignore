@@ -15,3 +15,13 @@ bin/supraworker-xc
 # Dependency directories (remove the comment below to include it)
 # vendor/
 /supraworker
+.idea
+## File-based project format:
+*.iws
+## Plugin-specific files:
+
+# IntelliJ
+/out/
+
+# mpeltonen/sbt-idea plugin
+.idea_modules/

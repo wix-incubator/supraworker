@@ -17,7 +17,7 @@ func init() {
 	rootCmd.AddCommand(configCMD)
 }
 
-// Pring config path command
+// Print config path command
 var configCMD = &cobra.Command{
 	Use: "configpath",
 	Run: func(command *cobra.Command, args []string) {

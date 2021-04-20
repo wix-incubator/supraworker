@@ -48,8 +48,7 @@ func NewProcessTree() (*Tree, error) {
 	treeProcessList = make(map[int]Process, len(processList))
 
 	for aux := range processList {
-		var process ps.Process
-		process = processList[aux]
+		process := processList[aux]
 		proc := Process{Stat: process, Children: make([]int, 0)}
 		treeProcessList[process.Pid()] = proc
 	}

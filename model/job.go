@@ -149,11 +149,11 @@ func (j *Job) Cancel() error {
 			}
 			if processList, err := ps.Processes(); err == nil {
 				for aux := range processList {
-					var process ps.Process
-					process = processList[aux]
+					process := processList[aux]
 					if ContainsIntInIntSlice(processChildren, process.Pid()) {
-						log.Tracef("[Job %s] Killing PID: %d --> Name: %s --> ParentPID: %d", j.Id, process.Pid(), process.Executable(), process.PPid())
-						syscall.Kill(process.Pid(), syscall.SIGTERM)
+						errKill := syscall.Kill(process.Pid(), syscall.SIGTERM)
+						log.Tracef("[Job %s] Killing PID: %d --> Name: %s --> ParentPID: %d [%v]", j.Id, process.Pid(), process.Executable(), process.PPid(), errKill)
+
 					}
 				}
 			}

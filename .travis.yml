@@ -18,7 +18,7 @@ before_script:
 
 script:
   - go test -bench=  -race -test.v  ./...
-  - docker run -ti --rm -v $(pwd):/app -w /app golangci/golangci-lint:v1.24.0 golangci-lint run -v
+  # - docker run -ti --rm -v $(pwd):/app -w /app golangci/golangci-lint:v1.24.0 golangci-lint run -v
   # - golangci-lint run
 
 before_deploy:

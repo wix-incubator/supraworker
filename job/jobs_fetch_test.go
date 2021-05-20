@@ -16,9 +16,9 @@ import (
 	"time"
 )
 
-func init() {
-	cmdtest.StartTrace()
-}
+//func init() {
+//	cmdtest.StartTrace()
+//}
 func TestHelperProcess(t *testing.T) {
 	cmdtest.TestHelperProcess(t)
 }
@@ -28,7 +28,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestGenerateJobs(t *testing.T) {
-	// defer goleak.VerifyNone(t)
+	defer goleak.VerifyNone(t)
 
 	// startTrace()
 	want := "{\"job_uid\":\"job-testing.(*common).Name-fm\",\"run_uid\":\"1\",\"extra_run_id\":\"1\",\"msg\":\"'S'\\n\"}"
@@ -88,7 +88,7 @@ func TestGenerateJobs(t *testing.T) {
 		if err != nil {
 			t.Errorf("ReadAll %s", err)
 		}
-		got = string(fmt.Sprintf("%s", b))
+		got = fmt.Sprintf("%s", b)
 		notifyStdoutSent <- true
 	}))
 	defer func() {
@@ -116,7 +116,7 @@ func TestGenerateJobs(t *testing.T) {
 	jobs := make(chan *model.Job, 1)
 
 	go func() {
-		if err := StartGenerateJobs(ctx, jobs, time.Duration(150)*time.Millisecond); err != nil {
+		if err := StartGenerateJobs(ctx, jobs, time.Duration(150)*time.Millisecond, 30*time.Second); err != nil {
 			log.Infof("StartGenerateJobs failed %v", err)
 		}
 	}()
@@ -134,7 +134,7 @@ func TestGenerateJobs(t *testing.T) {
 		}
 
 		if job.CMD != CMD {
-			t.Errorf("want %s, got %v", want, got)
+			t.Errorf("want %s, got %s", want, got)
 		}
 		job.Status = model.JOB_STATUS_CANCELED
 		// stop loop

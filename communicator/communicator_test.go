@@ -135,7 +135,6 @@ func TestGetCommunicatorsFromSection(t *testing.T) {
 	for _, tc := range cases {
 		var result Communicator
 		results, got := GetCommunicatorsFromSection(tc.section)
-		// log.Infof("results %v", results)
 		for _, val := range results {
 			result = val
 		}

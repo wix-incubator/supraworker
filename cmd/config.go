@@ -7,7 +7,7 @@ import (
 	config "github.com/weldpua2008/supraworker/config"
 )
 
-// Init
+// Init Supraworker
 func init() {
 	// Init config file for viper
 	rootCmd.PersistentFlags().StringVar(&config.CfgFile, "config", "", "config file (default is $HOME/supraworker.yaml)")

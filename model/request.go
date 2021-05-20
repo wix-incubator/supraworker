@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/weldpua2008/supraworker/communicator"
+
 	// "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"html/template"
@@ -78,6 +80,42 @@ func GetSliceParamsFromSection(stage string, param string) []string {
 	return c
 }
 
+// DoApi REST calls via communicators
+func DoApi(ctx context.Context, params map[string]interface{}, stage string) error {
+	//log.Tracef("[DoApi] ctx %v params %v stage %v", ctx, params, stage)
+	section := fmt.Sprintf("%v.%v",
+		config.CFG_PREFIX_JOBS, stage)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	defaultRequestTimeout := communicator.DefaultRequestTimeout
+	if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
+		if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", value)); errParseDuration == nil {
+			defaultRequestTimeout = duration
+		} else {
+			log.Tracef("[DoApi] Cannot parse duration %v stage %v", errParseDuration, stage)
+		}
+	}
+	allCommunicators, errGetCommunicators := communicator.GetCommunicatorsFromSection(section)
+	if errGetCommunicators != nil {
+		if comm, errGetCommunicators := communicator.GetSectionCommunicator(section); errGetCommunicators == nil {
+			allCommunicators = []communicator.Communicator{comm}
+		} else {
+			log.Warnf("[DoApi] Cannot use communicators from %s got %s", section, errGetCommunicators)
+		}
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, defaultRequestTimeout)
+	defer cancel() // cancel when we are getting the kill signal or exit
+	for _, comm := range allCommunicators {
+		res, err := comm.Fetch(fetchCtx, params)
+		//log.Infof("[comm.Fetch] params %v => %v", params, res)
+		if err != nil {
+			return fmt.Errorf("%w got %v error %v sent %v", ErrFailedSendRequest, res, err, params)
+		}
+	}
+	return nil
+}
+
 // DoApiCall for the jobs stages
 // TODO: add custom headers
 func DoApiCall(ctx context.Context, params map[string]string, stage string) (error, []map[string]interface{}) {
@@ -108,7 +146,18 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: time.Duration(15 * time.Second)}
+	defaultRequestTimeout := communicator.DefaultRequestTimeout
+	// TODO: Add a test
+	if ctx != nil {
+		if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
+			if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", value)); errParseDuration == nil {
+				defaultRequestTimeout = duration
+			} else {
+				return fmt.Errorf("Cannot parse duration %v", errParseDuration), nil
+			}
+		}
+	}
+	client := &http.Client{Timeout: defaultRequestTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("Failed to send request due %s", err), nil
@@ -119,7 +168,7 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 		return fmt.Errorf("error read response body got %s", err), nil
 	}
 	if (resp.StatusCode > 202) || (resp.StatusCode < 200) {
-		log.Trace(fmt.Sprintf("\nMaking request %s  to %s \nwith %s\nStatusCode %d Response %s\n", method, url, jsonStr, resp.StatusCode, body))
+		log.Tracef("\nMaking request %s  to %s \nwith %s\nStatusCode %d Response %s\n", method, url, jsonStr, resp.StatusCode, body)
 	}
 	err = json.Unmarshal(body, &rawResponseArray)
 	if err != nil {
@@ -166,8 +215,19 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	defaultRequestTimeout := communicator.DefaultRequestTimeout
+	// TODO: Add a test
+	if ctx != nil {
+		if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
+			if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", value)); errParseDuration == nil {
+				defaultRequestTimeout = duration
+			} else {
+				return fmt.Errorf("Cannot parse duration %v", errParseDuration), nil
+			}
+		}
+	}
 
-	client := &http.Client{Timeout: time.Duration(15 * time.Second)}
+	client := &http.Client{Timeout: defaultRequestTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("Failed to send request due %s", err), nil

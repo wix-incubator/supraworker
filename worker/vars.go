@@ -10,9 +10,9 @@ import (
 var (
 	// Number of active jobs
 	NumActiveJobs int
-
 	mu            sync.RWMutex
-	log           = logrus.WithFields(logrus.Fields{"package": "worker"})
+	logFields     = logrus.Fields{"package": "worker"}
+	log           = logrus.WithFields(logFields)
 	jobsProcessed = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "supraworker_processed_jobs_total",
 		Help: "The total number of processed jobs",
@@ -25,7 +25,6 @@ var (
 		Name: "supraworker_jobs_succeeded_total",
 		Help: "The total number of SUCCEEDED jobs",
 	})
-
 	jobsDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "supraworker_jobs_duration_secs",
 		Help:    "The Jobs duration in seconds.",

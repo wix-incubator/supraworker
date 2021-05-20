@@ -6,6 +6,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/mitchellh/go-ps"
+	"github.com/sirupsen/logrus"
+	"github.com/weldpua2008/supraworker/config"
+	"github.com/weldpua2008/supraworker/utils"
+	"io"
 	"io/ioutil"
 	"os/exec"
 	"strings"
@@ -33,13 +37,15 @@ func StoreKey(Id string, RunUID string, ExtraRunUID string) string {
 
 // Job public structure
 type Job struct {
-	Id                     string        // Identification for Job
-	RunUID                 string        // Running identification
-	ExtraRunUID            string        // Extra identification
+	Id                     string // Identification for Job
+	RunUID                 string // Running identification
+	ExtraRunUID            string // Extra identification
+	ExtraSendParams        map[string]string
 	Priority               int64         // Priority for a Job
 	CreateAt               time.Time     // When Job was created
 	StartAt                time.Time     // When command started
 	LastActivityAt         time.Time     // When job metadata last changed
+	PreviousStatus         string        // Previous Status
 	Status                 string        // Currently status
 	MaxAttempts            int           // Absolute max num of attempts.
 	MaxFails               int           // Absolute max number of failures.
@@ -54,6 +60,8 @@ type Job struct {
 	ExitCode               int // Exit code
 	cmd                    *exec.Cmd
 	ctx                    context.Context
+	alreadyStopped         bool
+	killOnce               sync.Once
 
 	// params got from your API
 	RawParams []map[string]interface{}
@@ -77,8 +85,8 @@ func (j *Job) StoreKey() string {
 
 // GetStatus get job status.
 func (j *Job) GetStatus() string {
-	j.mu.Lock()
-	defer j.mu.Unlock()
+	j.mu.RLock()
+	defer j.mu.RUnlock()
 	return j.Status
 }
 
@@ -89,21 +97,69 @@ func (j *Job) updatelastActivity() {
 
 // updateStatus job status
 func (j *Job) updateStatus(status string) error {
-	log.Trace(fmt.Sprintf("Job %s status %s -> %s", j.Id, j.Status, status))
+	j.GetLogger().Tracef("'%s' -> '%s'", j.Status, status)
+	j.PreviousStatus = j.Status
 	j.Status = status
 	return nil
+}
+
+func (j *Job) GetParamsWithResend(stage string) map[string]interface{} {
+	prefix := fmt.Sprintf("%s.%s", config.CFG_PREFIX_JOBS, stage)
+	resendParamsKeys := GetSliceParamsFromSection(prefix, "resend-params")
+
+	params := j.GetParams()
+	for _, resendParamKey := range resendParamsKeys {
+		for _, rawVal := range j.RawParams {
+			if val, ok := rawVal[resendParamKey]; ok {
+				if _, ok = params[resendParamKey]; !ok {
+					params[resendParamKey] = fmt.Sprintf("%s", val)
+				}
+			}
+		}
+	}
+	//log.Infof("Got resend %v for %s", params, prefix)
+
+	return params
+}
+
+// GetPreviousStatus returns Previous Status without JOB_STATUS_RUN_OK and JOB_STATUS_RUN_FAILED
+func (j *Job) GetPreviousStatus() string {
+	switch j.PreviousStatus {
+	case JOB_STATUS_RUN_OK, JOB_STATUS_RUN_FAILED:
+		return JOB_STATUS_IN_PROGRESS
+	}
+	return j.PreviousStatus
+}
+
+func (j *Job) GetParams() map[string]interface{} {
+	previousStatus := j.Status
+	if len(j.PreviousStatus) > 0 {
+		previousStatus = j.PreviousStatus
+	}
+	params := map[string]interface{}{
+		"Id":                j.Id,
+		"JobId":             j.Id,
+		"PreviousStatus":    j.GetPreviousStatus(),
+		"JobPreviousStatus": previousStatus,
+		"Status":            j.Status,
+		"RunUID":            j.RunUID,
+		"ExtraRunUID":       j.ExtraRunUID,
+		//"StoreKey":          j.StoreKey(),
+	}
+	if j.ExtraSendParams != nil {
+		for k, v := range j.ExtraSendParams {
+			if _, ok := params[k]; !ok {
+				params[k] = v
+			}
+		}
+	}
+	return params
 }
 
 // GetRawParams from all previous calls
 func (j *Job) GetRawParams() []map[string]interface{} {
 
 	return j.RawParams
-}
-
-// PutRawParams for all next calls
-func (j *Job) PutRawParams(params []map[string]interface{}) error {
-	j.RawParams = params
-	return nil
 }
 
 // GetAPIParams for stage from all previous calls
@@ -123,119 +179,161 @@ func (j *Job) GetAPIParams(stage string) map[string]string {
 			}
 		}
 	}
-	// log.Tracef("GetAPIParams(%s ) c:  %v \n",stage,c)
-
 	return c
 }
 
-// Cancel job
-// It triggers an update for the your API if it's configured
-func (j *Job) Cancel() error {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if !IsTerminalStatus(j.Status) {
-		log.Tracef("Call Canceled for Job %s", j.Id)
-		var processChildren []int
-		if j.cmd != nil && j.cmd.Process != nil {
+// Stops the job process and kills all children processes.
+func (j *Job) stopProcess() (cancelError error) {
+	var processChildren []int
+	if j.cmd != nil && j.cmd.Process != nil && !j.alreadyStopped {
+		j.killOnce.Do(func() {
+			j.alreadyStopped = true
+			j.GetLogger().Tracef("Killing main process %v", j.cmd.Process.Pid)
 			processTree, errTree := NewProcessTree()
 			if errTree == nil {
-				processTree.Get(1)
 				processChildren = processTree.Get(j.cmd.Process.Pid)
 			} else {
-				log.Warnf("Can't form process tree, got %v", errTree)
+				j.GetLogger().Warnf("Can't fetch process tree, got %v", errTree)
 			}
 			if err := j.cmd.Process.Kill(); err != nil {
-				return fmt.Errorf("failed to kill process: %s", err)
+				status := j.cmd.ProcessState.Sys().(syscall.WaitStatus)
+				exitStatus := status.ExitStatus()
+				signaled := status.Signaled()
+				signal := status.Signal()
+				//cancelError = fmt.Errorf("failed to kill process: %s", err)
+				if !signaled && exitStatus == 0 {
+					cancelError = fmt.Errorf("unexpected: err %v, exitStatus was %v + signal %s, while running: %s", err, exitStatus, signal, j.CMD)
+				}
 			}
 			if processList, err := ps.Processes(); err == nil {
 				for aux := range processList {
 					process := processList[aux]
 					if ContainsIntInIntSlice(processChildren, process.Pid()) {
 						errKill := syscall.Kill(process.Pid(), syscall.SIGTERM)
-						log.Tracef("[Job %s] Killing PID: %d --> Name: %s --> ParentPID: %d [%v]", j.Id, process.Pid(), process.Executable(), process.PPid(), errKill)
+						j.GetLogger().Tracef("Killing PID: %d --> Name: %s --> ParentPID: %d [%v]", process.Pid(), process.Executable(), process.PPid(), errKill)
 
 					}
 				}
 			}
-		}
-
-		if errUpdate := j.updateStatus(JOB_STATUS_CANCELED); errUpdate != nil {
-			log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, JOB_STATUS_CANCELED)
-
-		}
-		j.updatelastActivity()
-		stage := "jobs.cancel"
-		params := j.GetAPIParams(stage)
-		if err, result := DoApiCall(j.ctx, params, stage); err != nil {
-			log.Tracef("failed to update api, got: %s and %s", result, err)
-		}
-
+		})
 	}
-	// else {
-	// 	log.Trace(fmt.Sprintf("Job %s in terminal '%s' status ", j.Id, j.Status))
-	// }
-	return nil
+	return cancelError
+}
+
+// Cancel job
+// It triggers an update for the your API if it's configured
+func (j *Job) Cancel() error {
+	j.mu.Lock()
+
+	defer func() {
+		j.updatelastActivity()
+		// Fix race condition
+		j.mu.Unlock()
+	}()
+
+	if !IsTerminalStatus(j.Status) {
+		if errUpdate := j.updateStatus(JOB_STATUS_CANCELED); errUpdate != nil {
+			j.GetLogger().Warningf("failed to change status '%s' -> '%s'", j.Status, JOB_STATUS_CANCELED)
+		}
+		j.doApiCall("cancel")
+
+	} else if j.Status != JOB_STATUS_CANCELED {
+		j.GetLogger().Tracef("[CANCEL] already in terminal state %s", j.Status)
+	}
+	return j.stopProcess()
 }
 
 // Failed job flow
 // update your API
 func (j *Job) Failed() error {
 	j.mu.Lock()
-	defer j.mu.Unlock()
-	if !IsTerminalStatus(j.Status) {
-		log.Trace(fmt.Sprintf("Call Failed for Job %s", j.Id))
-
-		if j.cmd != nil && j.cmd.Process != nil {
-			if err := j.cmd.Process.Kill(); err != nil {
-				return fmt.Errorf("failed to kill process: %s", err)
-			}
-		}
-
-		if errUpdate := j.updateStatus(JOB_STATUS_ERROR); errUpdate != nil {
-			log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, JOB_STATUS_ERROR)
-
-		}
-		log.Tracef("[FAILED] Job '%s' moved to state %s", j.Id, j.Status)
-
+	defer func() {
 		j.updatelastActivity()
-	} else {
-		log.Tracef("[FAILED] Job '%s' is in terminal state to state %s", j.Id, j.Status)
-	}
-	stage := "jobs.failed"
-	params := j.GetAPIParams(stage)
-	if err, result := DoApiCall(j.ctx, params, stage); err != nil {
-		log.Tracef("failed to update api, got: %s and %s", result, err)
+		// Fix race condition
+		j.mu.Unlock()
+	}()
+	if !IsTerminalStatus(j.Status) {
+		if errUpdate := j.updateStatus(JOB_STATUS_ERROR); errUpdate != nil {
+			j.GetLogger().Warningf("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, JOB_STATUS_ERROR)
+		}
+		j.doApiCall("failed")
+	} else if j.Status != JOB_STATUS_ERROR {
+		j.GetLogger().Tracef("[FAILED] already in terminal state %s", j.Status)
 	}
 	return nil
+	//return j.stopProcess()
 }
 
-//  for job
-// update your API
-func (j *Job) AppendLogStream(logStream []string) error {
+// HitTimeout returns true if job hit timeout
+func (j *Job) HitTimeout() bool {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	if j.TTR < 1 {
+		return false
+	}
+	now := time.Now()
+	end := j.StartAt.Add(time.Duration(j.TTR) * time.Millisecond)
+	if now.After(end) {
+		return true
+	}
+	return false
+}
 
+// Timeout job flow
+// update your API
+func (j *Job) Timeout() error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if !IsTerminalStatus(j.Status) {
+		if errUpdate := j.updateStatus(JOB_STATUS_TIMEOUT); errUpdate != nil {
+			j.GetLogger().Warningf("failed to change status '%s' -> '%s'", j.Status, JOB_STATUS_ERROR)
+		}
+		j.updatelastActivity()
+		j.doApiCall("timeout")
+	} else if j.Status != JOB_STATUS_TIMEOUT {
+		j.GetLogger().Tracef("[TIMEOUT] is already in terminal state %s", j.Status)
+	}
+	return j.stopProcess()
+}
+
+// Appends log stream to the buffer.
+// The content of the buffer will be uploaded to API after:
+//  - high volume log producers - after j.elements
+//	- after buffer is full
+//	- after slow log interval
+func (j *Job) AppendLogStream(logStream []string) (err error) {
 	if j.quotaHit() {
 		<-j.notify
-		_ = j.doSendSteamBuf()
+		//select {
+		//case <-j.notify:
+		//case <-time.After(600 * time.Second):
+		//	j.GetLogger().Warningf("Timeout AppendLogStream")
+		//}
+		err = j.doSendSteamBuf()
 	}
 	j.incrementCounter()
 	j.streamsMu.Lock()
+	defer j.streamsMu.Unlock()
 	j.streamsBuf = append(j.streamsBuf, logStream...)
-	j.streamsMu.Unlock()
-	return nil
+
+	return err
 }
 
-//count next element
+// count next element
 func (j *Job) incrementCounter() {
 	j.streamsMu.Lock()
 	defer j.streamsMu.Unlock()
 	j.counter++
 }
 
+// Checks quota for the buffer
+// True - need to send
+// False - can wait
 func (j *Job) quotaHit() bool {
 	return (j.counter >= j.elements) || (len(j.streamsBuf) > int(j.elements)) || (j.timeQuote)
 }
 
-//scheduled elements counter refresher
+// Flushes buffer state and resets state of counters.
 func (j *Job) resetCounterLoop(ctx context.Context, after time.Duration) {
 	ticker := time.NewTicker(after)
 	tickerTimeInterval := time.NewTicker(2 * after)
@@ -244,33 +342,24 @@ func (j *Job) resetCounterLoop(ctx context.Context, after time.Duration) {
 		ticker.Stop()
 		tickerTimeInterval.Stop()
 		tickerSlowLogsInterval.Stop()
-		// close(j.notifyLogSent)
 	}()
 	for {
 		select {
 		case <-ctx.Done():
 			_ = j.doSendSteamBuf()
-			// j.notifyLogSent <- struct{}{}
-			// log.Tracef("resetCounterLoop finished for '%v'", j.Id)
 			return
 		case <-j.notifyStopStreams:
 			_ = j.doSendSteamBuf()
-			// j.notifyLogSent <- struct{}{}
-			// log.Tracef("resetCounterLoop finished for '%v'", j.Id)
 			return
 		case <-ticker.C:
-
 			j.streamsMu.Lock()
 			if j.quotaHit() {
-				// log.Tracef("doNotify for '%v'", j.Id)
 				j.timeQuote = false
 				j.doNotify()
-
 			}
 			j.counter = 0
 			j.streamsMu.Unlock()
 		case <-tickerTimeInterval.C:
-
 			j.streamsMu.Lock()
 			j.timeQuote = true
 			j.streamsMu.Unlock()
@@ -285,6 +374,7 @@ func (j *Job) doNotify() {
 	select {
 	case j.notify <- struct{}{}:
 	default:
+		return
 	}
 }
 
@@ -298,8 +388,8 @@ func (j *Job) FlushSteamsBuffer() error {
 func (j *Job) doSendSteamBuf() error {
 	j.streamsMu.Lock()
 	defer j.streamsMu.Unlock()
-	if len(j.streamsBuf) > 0 {
-		// log.Tracef("doSendSteamBuf for '%v' len '%v' %v\n ", j.Id, len(j.streamsBuf),j.streamsBuf)
+	if j.streamsBuf != nil && len(j.streamsBuf) > 0 {
+		// j.GetLogger().Tracef("doSendSteamBuf for '%v' len '%v' %v\n ", j.Id, len(j.streamsBuf),j.streamsBuf)
 
 		streamsReader := strings.NewReader(strings.Join(j.streamsBuf, ""))
 		// update API
@@ -308,14 +398,14 @@ func (j *Job) doSendSteamBuf() error {
 		if urlProvided(stage) {
 			// log.Tracef("Using DoApiCall for Streaming")
 			params["msg"] = strings.Join(j.streamsBuf, "")
-			if errApi, result := DoApiCall(j.ctx, params, stage); errApi != nil {
-				log.Tracef("failed to update api, got: %s and %s\n", result, errApi)
+			if errApi, result := DoApiCall(context.Background(), params, stage); errApi != nil {
+				j.GetLogger().Tracef("failed to update api, got: %s and %s\n", result, errApi)
 			}
 
 		} else {
 			var buf bytes.Buffer
 			if _, errReadFrom := buf.ReadFrom(streamsReader); errReadFrom != nil {
-				log.Tracef("buf.ReadFrom error %v\n", errReadFrom)
+				j.GetLogger().Tracef("buf.ReadFrom error %v\n", errReadFrom)
 			}
 			fmt.Printf("Job '%s': %s\n", j.Id, buf.String())
 		}
@@ -330,52 +420,19 @@ func (j *Job) doSendSteamBuf() error {
 // supports cancellation
 func (j *Job) runcmd() error {
 	j.mu.Lock()
+	j.StartAt = time.Now()
+	j.updatelastActivity()
+
 	ctx, cancel := prepareContext(j.ctx, j.TTR)
 	defer cancel()
+
 	// Use shell wrapper
 	shell, args := CmdWrapper(j.RunAs, j.UseSHELL, j.CMD)
 	j.cmd = execCommandContext(ctx, shell, args...)
 	j.cmd.Env = MergeEnvVars(j.CmdENV)
 	j.mu.Unlock()
 
-	stdout, err := j.cmd.StdoutPipe()
-	if err != nil {
-		_ = j.AppendLogStream([]string{fmt.Sprintf("cmd.StdoutPipe %s\n", err)})
-		return fmt.Errorf("cmd.StdoutPipe, %s", err)
-	}
-
-	stderr, err := j.cmd.StderrPipe()
-	if err != nil {
-		_ = j.AppendLogStream([]string{fmt.Sprintf("cmd.StderrPipe %s\n", err)})
-		return fmt.Errorf("cmd.StderrPipe, %s", err)
-	}
-
-	err = j.cmd.Start()
-	j.mu.Lock()
-	if errUpdate := j.updateStatus(JOB_STATUS_IN_PROGRESS); errUpdate != nil {
-		log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, JOB_STATUS_IN_PROGRESS)
-	}
-	j.mu.Unlock()
-	if err != nil && j.cmd.Process != nil {
-		log.Tracef("Run cmd: %v [%v]\n", j.cmd, j.cmd.Process.Pid)
-
-	} else {
-		log.Tracef("Run cmd: %v\n", j.cmd)
-
-	}
-	// update API
-	stage := "jobs.run"
-	if errApi, result := DoApiCall(j.ctx, j.GetAPIParams(stage), stage); errApi != nil {
-		log.Tracef("failed to update api, got: %s and %s\n", result, errApi)
-	}
-	if err != nil {
-		_ = j.AppendLogStream([]string{fmt.Sprintf("cmd.Start %s\n", err)})
-		return fmt.Errorf("cmd.Start, %s", err)
-	}
-	notifyStdoutSent := make(chan bool, 1)
-	notifyStderrSent := make(chan bool, 1)
-
-	// reset backpresure counter
+	// reset backpressure counter
 	per := 5 * time.Second
 	if j.ResetBackPressureTimer.Nanoseconds() > 0 {
 		per = j.ResetBackPressureTimer
@@ -384,13 +441,52 @@ func (j *Job) runcmd() error {
 	defer cancel()
 	go j.resetCounterLoop(resetCtx, per)
 
-	// parse stdout
-	// send logs to streaming API
-	go func() {
+	stdout, err := j.cmd.StdoutPipe()
+	if err != nil {
+		msg := fmt.Sprintf("Cannot initial stdout %s\n", err)
+		_ = j.AppendLogStream([]string{msg})
+		return fmt.Errorf(msg)
+	}
+
+	stderr, err := j.cmd.StderrPipe()
+	if err != nil {
+		msg := fmt.Sprintf("Cannot initial stderr %s\n", err)
+		_ = j.AppendLogStream([]string{msg})
+		return fmt.Errorf(msg)
+	}
+
+	j.mu.Lock()
+	err = j.cmd.Start()
+	if errUpdate := j.updateStatus(JOB_STATUS_IN_PROGRESS); errUpdate != nil {
+		j.GetLogger().Tracef("failed to change status '%s' -> '%s'", j.Status, JOB_STATUS_IN_PROGRESS)
+	}
+
+	if err != nil && j.cmd.Process != nil {
+		j.GetLogger().Tracef("Start CMD: %s [%d] TTR %v\n", j.cmd, j.cmd.Process.Pid, time.Duration(j.TTR)*time.Millisecond)
+	} else {
+		j.GetLogger().Tracef("Start CMD: %s TTR %v\n", j.cmd, time.Duration(j.TTR)*time.Millisecond)
+	}
+	// update API
+	j.doApiCall("run")
+	j.mu.Unlock()
+	if err != nil {
+		j.GetLogger().Tracef("Exiting...cmd.Start has error %s", err)
+
+		_ = j.AppendLogStream([]string{fmt.Sprintf("cmd.Start %s\n", err)})
+		return fmt.Errorf("cmd.Start, %s", err)
+	}
+	notifyStdoutSent := make(chan bool, 1)
+	notifyStderrSent := make(chan bool, 1)
+
+	// copies stdout/stderr to to streaming API
+	copyStd := func(data *io.ReadCloser, processed chan<- bool) {
 		defer func() {
-			notifyStdoutSent <- true
+			processed <- true
 		}()
-		stdOutBuf := bufio.NewReader(stdout)
+		if data == nil {
+			return
+		}
+		stdOutBuf := bufio.NewReader(*data)
 		scanner := bufio.NewScanner(stdOutBuf)
 		scanner.Split(bufio.ScanLines)
 
@@ -399,12 +495,10 @@ func (j *Job) runcmd() error {
 		// We will be able to scan the stdout as long as none of the lines is
 		// larger than 1MB.
 		scanner.Buffer(buf, bufio.MaxScanTokenSize)
-		if stdout == nil {
-			return
-		}
+
 		for scanner.Scan() {
 			if errScan := scanner.Err(); errScan != nil {
-				stdOutBuf.Reset(stdout)
+				stdOutBuf.Reset(*data)
 			}
 
 			msg := scanner.Text()
@@ -412,101 +506,85 @@ func (j *Job) runcmd() error {
 		}
 
 		if scanner.Err() != nil {
-			// stdout.Close()
-			// log.Tracef("Stdout %v unexpected failure: %v", j.Id, scanner.Err())
-			b, err := ioutil.ReadAll(stdout)
+			b, err := ioutil.ReadAll(*data)
 			if err == nil {
 				_ = j.AppendLogStream([]string{string(b), "\n"})
 			} else {
-				log.Tracef("Stdout ReadAll %v unexpected failure: %v", j.Id, err)
-
+				j.GetLogger().Tracef("[Job  %v] Scanner got unexpected failure: %v", j.Id, err)
 			}
 		}
-	}()
-	// parse stderr
-	// send logs to streaming API
-	go func() {
-		defer func() {
-			notifyStderrSent <- true
-		}()
+	}
 
-		stdErrScanner := bufio.NewScanner(stderr)
-		// stdErrScanner.Split(bufio.ScanWords)
-		stdErrScanner.Split(bufio.ScanLines)
-		buf := make([]byte, 0, 64*1024)
-		// The second argument to scanner.Buffer() sets the maximum token size.
-		// We will be able to scan the stdout as long as none of the lines is
-		// larger than 1MB.
+	// send stdout to streaming API
+	go copyStd(&stdout, notifyStdoutSent)
 
-		stdErrScanner.Buffer(buf, bufio.MaxScanTokenSize)
-		if stderr == nil {
-			return
-		}
+	// send stderr to streaming API
+	go copyStd(&stderr, notifyStderrSent)
 
-		stdErrScanner.Split(bufio.ScanLines)
-
-		for stdErrScanner.Scan() {
-			msg := stdErrScanner.Text()
-			_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", msg)})
-		}
-		if stdErrScanner.Err() != nil {
-			log.Tracef("Stderr %v unexpected failure: %v", j.Id, stdErrScanner.Err())
-			b, err := ioutil.ReadAll(stderr)
-			if err == nil {
-				_ = j.AppendLogStream([]string{string(b), "\n"})
-			} else {
-				log.Tracef("Stderr ReadAll %v unexpected failure: %v", j.Id, err)
-
-			}
-
-		}
-
-	}()
 	<-notifyStdoutSent
 	<-notifyStderrSent
-
+	j.mu.Lock()
 	// The returned error is nil if the command runs, has
 	// no problems copying stdin, stdout, and stderr,
 	// and exits with a zero exit status.
-	// log.Tracef("cmd.Wait %v", j.Id)
+
 	err = j.cmd.Wait()
+	// signal that we've read all logs
+
+	j.notifyStopStreams <- struct{}{}
+	j.mu.Unlock()
 	if err != nil {
-		log.Tracef("cmd.Wait for '%v' returned error: %v", j.Id, err)
+		status := j.cmd.ProcessState.Sys().(syscall.WaitStatus)
+		signaled := status.Signaled()
+
+		if !signaled {
+			j.GetLogger().Tracef("cmd.Wait for '%v' returned error: %v", j.Id, err)
+		} /* else {
+			log.Tracef("Got Signal: %v, while running: %s", status.Signal(), j.CMD)
+		}
+		*/
 	}
 
-	// signal that we've read all logs
-	j.notifyStopStreams <- struct{}{}
+	j.mu.Lock()
+	defer j.mu.Unlock()
 	status := j.cmd.ProcessState.Sys()
 	ws, ok := status.(syscall.WaitStatus)
+
 	if !ok {
-		err = fmt.Errorf("process state Sys() was a %T; want a syscall.WaitStatus", status)
+		err = fmt.Errorf("%w got %T", ErrorJobNotInWaitStatus, status)
 		j.exitError = err
 	}
 	exitCode := ws.ExitStatus()
 	j.ExitCode = exitCode
-	if exitCode < 0 {
-		err = fmt.Errorf("invalid negative exit status %d", exitCode)
-		j.exitError = err
-	}
-	if exitCode != 0 {
+	j.alreadyStopped = true
+
+	switch {
+	case j.Status == JOB_STATUS_CANCELED:
+		err = ErrJobCancelled
+	case j.Status == JOB_STATUS_TIMEOUT:
+		err = ErrJobTimeout
+	case ctx != nil && ctx.Err() == context.DeadlineExceeded:
+		err = ErrJobTimeout
+	case exitCode < 0:
+		err = fmt.Errorf("%w %d", ErrInvalidNegativeExitCode, exitCode)
+		_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
+	case exitCode != 0:
 		err = fmt.Errorf("exit code '%d'", exitCode)
 		_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
-		j.exitError = err
-	}
-	if err == nil {
+	case err == nil:
 		signaled := ws.Signaled()
 		signal := ws.Signal()
-		// log.Tracef("Error: %v", err)
 		if signaled {
-			log.Tracef("Signal: %v", signal)
-			err = fmt.Errorf("Signal: %v", signal)
-			j.exitError = err
+			err = fmt.Errorf("%w %v", ErrJobGotSignal, signal)
 		}
 	}
-	if err == nil && j.Status == JOB_STATUS_CANCELED {
-		err = fmt.Errorf("return error for Canceled Job")
+	if !IsTerminalStatus(j.Status) {
+		j.Status = JOB_STATUS_RUN_OK
+		if err != nil {
+			j.Status = JOB_STATUS_RUN_FAILED
+		}
 	}
-	// log.Tracef("The number of goroutines that currently exist.: %v", runtime.NumGoroutine())
+	j.exitError = err
 	return err
 }
 
@@ -514,29 +592,18 @@ func (j *Job) runcmd() error {
 // return error in case we have exit code greater then 0
 func (j *Job) Run() error {
 	j.mu.Lock()
-	j.StartAt = time.Now()
-	j.updatelastActivity()
+	alreadyRunning := j.Status == JOB_STATUS_IN_PROGRESS || IsTerminalStatus(j.Status)
 	j.mu.Unlock()
+	if alreadyRunning {
+		return fmt.Errorf("Cannot start Job %s with status '%s' ", j.Id, j.Status)
+	}
 	err := j.runcmd()
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	j.exitError = err
-	j.updatelastActivity()
-	if !IsTerminalStatus(j.Status) {
-		finalStatus := JOB_STATUS_ERROR
-		if err == nil {
-			finalStatus = JOB_STATUS_SUCCESS
-		}
-
-		if errUpdate := j.updateStatus(finalStatus); errUpdate != nil {
-			log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, finalStatus)
-
-		}
-		log.Tracef("[RUN] Job '%s' is moved to state %s", j.Id, j.Status)
-	} else {
-		log.Tracef("[RUN] Job '%s' is in terminal state to state %s", j.Id, j.Status)
+	if err != nil && j.exitError == nil {
+		j.exitError = err
 	}
-	// <-j.notifyLogSent
+	j.updatelastActivity()
 	return err
 }
 
@@ -545,16 +612,25 @@ func (j *Job) Finish() error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.updatelastActivity()
+
 	if errUpdate := j.updateStatus(JOB_STATUS_SUCCESS); errUpdate != nil {
-		log.Tracef("failed to change job %s status '%s' -> '%s'", j.Id, j.Status, JOB_STATUS_SUCCESS)
-	}
-	stage := "jobs.finish"
-	params := j.GetAPIParams(stage)
-	if err, result := DoApiCall(j.ctx, params, stage); err != nil {
-		log.Tracef("failed to update api, got: %s and %s", result, err)
+		j.GetLogger().Tracef("failed to change status '%s' -> '%s'", j.Status, JOB_STATUS_SUCCESS)
 	}
 
+	j.doApiCall("finish")
 	return nil
+}
+
+func (j *Job) doApiCall(stage string) {
+
+	params := j.GetParamsWithResend(stage)
+	ctx := j.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := DoApi(ctx, params, stage); err != nil {
+		j.GetLogger().Tracef("doApiCall [%s] fails with '%s'", stage, err)
+	}
 }
 
 // SetContext for job
@@ -565,6 +641,38 @@ func (j *Job) SetContext(ctx context.Context) {
 	j.ctx = ctx
 }
 
+// AddToContext for job
+// in case there is time limit for example
+func (j *Job) AddToContext(key interface{}, value interface{}) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.ctx == nil {
+		j.ctx = context.Background()
+	}
+	context.WithValue(j.ctx, key, value)
+}
+
+// GetContext of the job
+func (j *Job) GetContext() *context.Context {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	if j.ctx == nil {
+		ctx := context.Background()
+		return &ctx
+	}
+	return &j.ctx
+}
+
+// GetLogger from job context
+func (j *Job) GetLogger() *logrus.Entry {
+	ret := log
+	if j.ctx != nil {
+		ret = utils.LoggerFromContext(j.ctx, ret)
+	}
+
+	return ret
+}
+
 // NewJob return Job with defaults
 func NewJob(id string, cmd string) *Job {
 	return &Job{
@@ -573,6 +681,7 @@ func NewJob(id string, cmd string) *Job {
 		StartAt:           time.Now(),
 		LastActivityAt:    time.Now(),
 		Status:            JOB_STATUS_PENDING,
+		PreviousStatus:    JOB_STATUS_PENDING,
 		MaxFails:          1,
 		MaxAttempts:       1,
 		CMD:               cmd,
@@ -586,6 +695,7 @@ func NewJob(id string, cmd string) *Job {
 		elements:          100,
 		UseSHELL:          true,
 		RunAs:             "",
+		ctx:               utils.FromJobID(context.Background(), id),
 		StreamInterval:    time.Duration(5) * time.Second,
 	}
 }

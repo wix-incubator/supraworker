@@ -25,3 +25,7 @@ bin/supraworker-xc
 
 # mpeltonen/sbt-idea plugin
 .idea_modules/
+
+# pprof files
+pprof.supraworker.*.pb.gz
+*.pyc

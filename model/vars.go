@@ -1,11 +1,26 @@
 package model
 
 import (
+	"errors"
 	"github.com/sirupsen/logrus"
 	"os/exec"
 )
 
+type ContextKey string
+
+const (
+	CtxKeyRequestTimeout ContextKey = "ctx_req_timeout"
+	CtxKeyRequestWorker  ContextKey = "ctx_req_worker_id"
+)
+
 var (
+	ErrFailedSendRequest       = errors.New("Failed to send request")
+	ErrInvalidNegativeExitCode = errors.New("Invalid negative exit code")
+	ErrJobCancelled            = errors.New("Job cancelled")
+	ErrJobTimeout              = errors.New("Job timeout")
+	ErrJobGotSignal            = errors.New("Job got sgnal")
+	ErrorJobNotInWaitStatus    = errors.New("Process state is not in WaitStatus")
+
 	execCommandContext = exec.CommandContext
 	// FetchNewJobAPIURL is URL for pulling new jobs
 	FetchNewJobAPIURL string
@@ -28,14 +43,18 @@ type Jobber interface {
 	Run() error
 	Cancel() error
 	Finish() error
+	Timeout() error
 }
 
 const (
-	JOB_STATUS_PENDING     = "pending"
-	JOB_STATUS_IN_PROGRESS = "in_progress"
-	JOB_STATUS_SUCCESS     = "success"
-	JOB_STATUS_ERROR       = "error"
-	JOB_STATUS_CANCELED    = "canceled"
+	JOB_STATUS_PENDING     = "PENDING"
+	JOB_STATUS_IN_PROGRESS = "RUNNING"
+	JOB_STATUS_SUCCESS     = "SUCCESS"
+	JOB_STATUS_RUN_OK      = "RUN_OK"
+	JOB_STATUS_RUN_FAILED  = "RUN_FAILED"
+	JOB_STATUS_ERROR       = "ERROR"
+	JOB_STATUS_CANCELED    = "CANCELED"
+	JOB_STATUS_TIMEOUT     = "TIMEOUT"
 )
 
 func init() {

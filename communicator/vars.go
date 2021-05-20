@@ -3,9 +3,10 @@ package communicator
 import (
 	"errors"
 	"github.com/sirupsen/logrus"
-	"net/http"
 	"time"
 )
+
+type ContextKey string
 
 var (
 	// Constructors is a map of all Communicator types with their specs.
@@ -20,14 +21,13 @@ var (
 	ErrNotAllowedResponseCode  = errors.New("Not allowed response code")
 
 	// internal
-	log              = logrus.WithFields(logrus.Fields{"package": "communicator"})
-	globalHttpClient = &http.Client{Timeout: time.Duration(15 * time.Second)}
+	log = logrus.WithFields(logrus.Fields{"package": "communicator"})
 )
 
-// String constants representing each communicator type.
 const (
 	// ConstructorsTypeRest represents HTTP communicator
-	ConstructorsTypeRest       = "HTTP"
-	CTX_ALLOWED_RESPONSE_CODES = "allowed_response_codes"
-	CFG_PREFIX_COMMUNICATORS   = ""
+	ConstructorsTypeRest               = "HTTP"
+	CtxAllowedResponseCodes ContextKey = "allowed_response_codes"
+	CtxRequestTimeout       ContextKey = "ctx_req_timeout"
+	DefaultRequestTimeout              = 120 * time.Second
 )

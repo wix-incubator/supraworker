@@ -21,63 +21,38 @@ import (
 const (
 	// ProjectName defines project name
 	ProjectName = "supraworker"
+	// Default number of workers
+	DefaultNumWorkers = 5
 )
 
 // Config is top level Configuration structure
 type Config struct {
 	// Identification for the process
-	ClientId      string `mapstructure:"clientId"`
-	NumActiveJobs int    // Number of jobs
-	NumFreeSlots  int    // Number of free jobs slots
-	NumWorkers    int
-
-	ClusterId   string
-	ClusterPool string
-	URL         string // Used for overload URL for Tests "{{.URL}}"
+	ClientId            string `mapstructure:"clientId"`
+	NumActiveJobs       int    // Number of jobs
+	NumFreeSlots        int    // Number of free jobs slots
+	NumWorkers          int    `mapstructure:"workers"`
+	PrometheusNamespace string
+	PrometheusService   string
+	ClusterId           string `mapstructure:"clusterId"`
+	ClusterPool         string `mapstructure:"clusterPool"`
+	URL                 string // Used for overload URL for Tests "{{.URL}}"
 
 	// delay between API calls to prevent Denial-of-service
 	CallAPIDelaySec int `mapstructure:"api_delay_sec"`
-	// represent API for Jobs
-	JobsAPI ApiOperations `mapstructure:"jobs"`
-	// LogsAPI         ApiOperations `mapstructure:"logs"`
-	HeartBeat ApiOperations `mapstructure:"heartbeat"`
 	// Config version
 	ConfigVersion string `mapstructure:"version"`
 }
 
-// ApiOperations is defines operations structure
-type ApiOperations struct {
-	Run         UrlConf `mapstructure:"run"`         // defines how to run item
-	Cancelation UrlConf `mapstructure:"cancelation"` // defines how to cancel item
-
-	LogStreams UrlConf `mapstructure:"logstream"` // defines how to get item
-
-	Get    UrlConf `mapstructure:"get"`    // defines how to get item
-	Lock   UrlConf `mapstructure:"lock"`   // defines how to lock item
-	Update UrlConf `mapstructure:"update"` // defines how to update item
-	Unlock UrlConf `mapstructure:"unlock"` // defines how to unlock item
-	Finish UrlConf `mapstructure:"finish"` // defines how to finish item
-	Failed UrlConf `mapstructure:"failed"` // defines how to update on failed
-	Cancel UrlConf `mapstructure:"cancel"` // defines how to update on cancel
-
-}
-
-// UrlConf defines all params for request.
-type UrlConf struct {
-	Url             string            `mapstructure:"url"`
-	Method          string            `mapstructure:"method"`
-	Headers         map[string]string `mapstructure:"headers"`
-	PreservedFields map[string]string `mapstructure:"preservedfields"`
-	Params          map[string]string `mapstructure:"params"`
-}
-
 var (
-	// CfgFile defines Path to the config
+	// CfgFile defines Path to the config.
 	CfgFile string
 	// ClientId defines Identification for the instance.
 	ClientId string
+	// NumWorkers parallel threads for processing jobs.
+	NumWorkers int
 	// C defines main configuration structure.
-	C Config = Config{
+	C = Config{
 		CallAPIDelaySec: int(2),
 		NumActiveJobs:   0,
 		NumFreeSlots:    0,
@@ -89,17 +64,41 @@ var (
 // Init configuration
 func init() {
 	cobra.OnInitialize(initConfig)
+}
+
+func choseClientId() {
+	switch {
+	case len(ClientId) > 0:
+		C.ClientId = ClientId
+	case len(C.ClientId) > 0:
+	default:
+		C.ClientId = "supraworker"
+	}
+	log.Tracef("Using ClientId %s", C.ClientId)
+}
+
+func updateNumWorkers() {
+	switch {
+	case NumWorkers > 0:
+		C.NumWorkers = NumWorkers
+	case C.NumWorkers > 0:
+	default:
+		C.NumWorkers = DefaultNumWorkers
+	}
+	log.Tracef("Using NumWorkers %d", C.NumWorkers)
+}
+
+func updateProm() {
+	C.PrometheusService = GetStringTemplatedDefault("prometheus.service", "default")
+	C.PrometheusNamespace = GetStringTemplatedDefault("prometheus.namespace", "supraworker")
 
 }
 
 // ReinitializeConfig on load or file change
 func ReinitializeConfig() {
-	if len(ClientId) > 0 {
-		C.ClientId = ClientId
-	}
-	if len(C.ClientId) < 1 {
-		C.ClientId = "supraworker"
-	}
+	choseClientId()
+	updateNumWorkers()
+	updateProm()
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -125,7 +124,6 @@ func initConfig() {
 			viper.AddConfigPath(fmt.Sprintf("$HOME/.%s/", lProjectName))
 			viper.AddConfigPath("/etc/")
 			viper.AddConfigPath(fmt.Sprintf("/etc/%s/", lProjectName))
-
 		}
 
 		if conf := os.Getenv(fmt.Sprintf("%s_CFG", strings.ToUpper(ProjectName))); conf != "" {
@@ -138,15 +136,16 @@ func initConfig() {
 	viper.AutomaticEnv()
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err != nil {
-		logrus.Fatal("Can't read config:", err)
+		logrus.Fatalf("Can't read config: %s", err)
 	}
 	err := viper.Unmarshal(&C)
 	if err != nil {
-		logrus.Fatal(fmt.Sprintf("unable to decode into struct, %v", err))
-
+		logrus.Fatalf("unable to decode into struct, %v", err)
 	}
 	log.Debug(viper.ConfigFileUsed())
-
+	choseClientId()
+	updateNumWorkers()
+	updateProm()
 }
 
 func GetStringTemplatedDefault(section string, def string) string {
@@ -163,7 +162,6 @@ func GetStringTemplatedDefault(section string, def string) string {
 			return def
 		}
 		return tplBytes.String()
-
 	}
 	return def
 }
@@ -171,13 +169,12 @@ func GetStringTemplatedDefault(section string, def string) string {
 // GetMapStringMapStringTemplatedDefault returns map of [string]string maps templated & enriched by default.
 func GetMapStringMapStringTemplatedDefault(section string, param string, def map[string]string) map[string]map[string]string {
 	ret := make(map[string]map[string]string)
-	sections_values := viper.GetStringMap(fmt.Sprintf("%s.%s", section, param))
-	for subsection, section_value := range sections_values {
-		if section_value == nil {
+	sectionsValues := viper.GetStringMap(fmt.Sprintf("%s.%s", section, param))
+	for subsection, sectionValue := range sectionsValues {
+		if sectionValue == nil {
 			continue
 		}
-		// log.Infof("%s.%s => %v",  section, param,k1)
-		if params, ok := section_value.(map[string]interface{}); ok {
+		if params, ok := sectionValue.(map[string]interface{}); ok {
 			c := make(map[string]string)
 			for k, v := range def {
 				c[k] = v
@@ -198,7 +195,6 @@ func GetMapStringMapStringTemplatedDefault(section string, param string, def map
 			}
 			ret[fmt.Sprintf("%s.%s.%s", section, param, subsection)] = c
 		}
-
 	}
 	return ret
 }
@@ -302,12 +298,4 @@ func GetTimeDurationDefault(section string, param string, def time.Duration) (in
 		}
 	}
 	return def
-}
-
-func ConvertMapStringToInterface(in map[string]string) map[string]interface{} {
-	out := make(map[string]interface{})
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
 }

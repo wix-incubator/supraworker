@@ -4,7 +4,6 @@ go 1.15
 
 require (
 	github.com/cenkalti/backoff/v4 v4.1.0
-	github.com/epsagon/epsagon-go v1.7.0
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/prometheus/client_golang v0.9.3

@@ -1,4 +1,4 @@
-FROM golang:1.13-alpine AS build-env
+FROM golang:1.14-alpine AS build-env
 
 WORKDIR /go/src/github.com/weldpua2008/supraworker
 
@@ -13,7 +13,7 @@ RUN go get -d -v ./... && \
     go install -v ./... && \
     export GIT_COMMIT_LOACAL=$(git log -1 --format=%H) && \
     export GIT_COMMIT=${GIT_COMMIT:-$GIT_COMMIT_LOACAL} && \
-    go build -o /root/supraworker -ldflags="-X github.com/weldpua2008/supraworker/cmd.GitCommit=${GIT_COMMIT}" main.go
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /root/supraworker -ldflags="-X github.com/weldpua2008/supraworker/cmd.GitCommit=${GIT_COMMIT}" main.go
 
 FROM alpine:latest
 

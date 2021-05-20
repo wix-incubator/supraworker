@@ -28,8 +28,8 @@ type Communicator interface {
 // GetCommunicator returns Communicator by type.
 func GetCommunicator(communicatorType string) (Communicator, error) {
 	k := strings.ToUpper(communicatorType)
-	if type_struct, ok := Constructors[k]; ok {
-		if comm := type_struct.instance(); comm != nil {
+	if typeStruct, ok := Constructors[k]; ok {
+		if comm := typeStruct.instance(); comm != nil {
 			return comm, nil
 		} else {
 			return nil, fmt.Errorf("%w for %s.\n", ErrNoSuitableCommunicator, communicatorType)
@@ -91,7 +91,7 @@ func GetCommunicatorsFromSection(section string) ([]Communicator, error) {
 		if typeStruct, ok := Constructors[k]; ok {
 			communicatorInstance := typeStruct.instance()
 			if err1 := communicatorInstance.Configure(utils.ConvertMapStringToInterface(comm)); err1 != nil {
-				log.Tracef("Can't configure %v communicator, got %v", communicatorType, comm)
+				log.Tracef("Can't configure %s communicator, got %v", communicatorType, comm)
 				return nil, err1
 			}
 			// log.Tracef("Configured communicator %v with %v",k, comm)

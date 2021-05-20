@@ -1,4 +1,10 @@
 **/*_test.go
-
+tests/*
+.github/*
 build/_workspace
 build/_bin
+.golangci.yml
+.travis.yml
+./supraworker
+.git
+.git/*

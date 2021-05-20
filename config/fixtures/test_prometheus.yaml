@@ -1,0 +1,5 @@
+workers: 10
+version: "1.0"
+prometheus:
+  namespace: "test-prom"
+  service: "test-service"

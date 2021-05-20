@@ -1,0 +1,114 @@
+clientId: "exampleclient"
+workers: 50
+api_delay_sec: 1
+headers:
+  "Content-type": "application/json"
+
+jobs:
+  cancelation:
+    url: "http://api:8080/api/v1/jobs/fetch_cancel"
+    method: post
+    params:
+      jobFlowId: "{{ .ClientId}}"
+      limit: 5
+  logstream:
+    url: "http://api:8080/api/v1/logs/run"
+    method: POST
+    resend-params:
+        - "job_id"
+        - "run_id"
+        - "extra_run_id"
+  get:
+    url: "http://api:8080/api/v1/jobs/fetch_new"
+    method: post
+    params:
+      jobflowid: "{{ .ClientId}}"
+      limit: 500
+  run:
+    communicator: &run
+      url: "http://api:8080/api/v1/jobs/runs"
+      method: put
+      params:
+        job_status: "RUNNING"
+        job_id: "{{ .JobId }}"
+        run_id: "{{ .RunUID}}"
+        extra_run_id: "{{.ExtraRunUID}}"
+        previous_job_status: "{{.PreviousStatus}}"
+      codes:
+        - 200
+        - 201
+      backoff:
+        maxelapsedtime: 301s
+        maxinterval: 1s
+        initialinterval: 1s
+
+  finish: &finish
+    communicator:
+      url: "http://api:8080/api/v1/jobs/runs"
+      method: put
+      codes:
+        - 200
+        - 201
+      backoff:
+        maxelapsedtime: 301s
+        maxinterval: 1s
+        initialinterval: 1s
+      params:
+        job_status: "SUCCESS"
+        job_id: "{{ .JobId }}"
+        run_id: "{{ .RunUID}}"
+        extra_run_id: "{{.ExtraRunUID}}"
+        previous_job_status: "{{.PreviousStatus}}"
+  failed: &failed
+    communicator:
+      url: "http://api:8080/api/v1/jobs/runs"
+      method: put
+      codes:
+        - 200
+        - 201
+      backoff:
+        maxelapsedtime: 301s
+        maxinterval: 1s
+        initialinterval: 1s
+      params:
+        job_status: "FAILED"
+        job_id: "{{ .JobId }}"
+        run_id: "{{ .RunUID}}"
+        extra_run_id: "{{.ExtraRunUID}}"
+        previous_job_status: "{{.PreviousStatus}}"
+  timeout: &timeout
+    communicator:
+      url: "http://api:8080/api/v1/jobs/runs"
+      method: put
+      codes:
+        - 200
+        - 201
+      backoff:
+        maxelapsedtime: 301s
+        maxinterval: 1s
+        initialinterval: 1s
+      params:
+        job_status: "TIMEOUT"
+        job_id: "{{ .JobId }}"
+        run_id: "{{ .RunUID}}"
+        extra_run_id: "{{.ExtraRunUID}}"
+        previous_job_status: "{{.PreviousStatus}}"
+  cancel: &cancel
+    communicator:
+      url: "http://api:8080/api/v1/jobs/runs"
+      method: put
+      codes:
+        - 200
+        - 201
+      backoff:
+        maxelapsedtime: 301s
+        maxinterval: 1s
+        initialinterval: 1s
+      params:
+        job_status: "CANCELLED"
+        job_id: "{{ .JobId }}"
+        run_id: "{{ .RunUID}}"
+        extra_run_id: "{{.ExtraRunUID}}"
+        previous_job_status: "{{.PreviousStatus}}"
+
+version: 1

@@ -1,0 +1,79 @@
+version: '3.8'
+x-config: &x-config
+  MYSQL_ROOT_PASSWORD: "test"
+  MYSQL_DATABASE: "test"
+  MYSQL_USER: "test"
+  MYSQL_PASSWORD: "test"
+services:
+  # working with mysql
+  # docker exec -ti tests_db_1 mysql -uroot -ptest -D dev
+  db:
+    image: "mysql:8.0"
+    environment:
+      <<: *x-config
+    restart: always
+    ports:
+      - "33061:3306"
+    volumes:
+      - ./sql:/docker-entrypoint-initdb.d
+  api:
+    depends_on:
+      - db
+#    image: "local/suppraworker-api-server"
+    build: ../docker-image/apiserver
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *x-config
+    volumes:
+      - "../docker-image/apiserver/:/app/"
+
+  supraworker:
+     build:
+      context: ../
+      dockerfile: docker-image/supraworker-image-local/Dockerfile
+      args:
+        BASE_IMAGE: "golang"
+        BASE_TAG: "1.15-alpine"
+     ports:
+       - 8088:8080
+     volumes:
+       - "./supraworker/supraworker.yml:/root/supraworker.yaml"
+     depends_on:
+       - api
+  prometheus:
+    image: "prom/prometheus:latest"
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - supraworker
+
+  grafana:
+    image:  "grafana/grafana"
+    restart: unless-stopped
+    depends_on:
+      - supraworker
+      - prometheus
+    ports:
+      - 3000:3000
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    volumes:
+      - ./grafana-settings/datasources.yml:/etc/grafana/provisioning/datasource.yaml
+      - ./grafana-settings/datasources.yml:/etc/grafana/provisioning/datasources/datasource.yaml
+      - ./grafana-settings/dashboard.json:/var/lib/grafana/dashboards/dashboards/dashboard.json
+      - ./grafana-settings/provisioner.yaml:/etc/grafana/provisioning/dashboards/provisioner.yaml
+      - ./grafana-settings/go-metrics.json:/var/lib/grafana/dashboards/dashboards/go-metrics.json
+
+#      - ./grafana:/var/lib/grafana
+#      - ./grafana/etc:/etc/grafana

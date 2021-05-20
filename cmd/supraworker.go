@@ -30,9 +30,12 @@ import (
 var (
 	verbose   bool
 	traceFlag bool
-	// epsagonTraceFlag bool
-	log            = logrus.WithFields(logrus.Fields{"package": "cmd"})
-	numWorkers int = 5
+	pprofFlag bool
+	promFlag  = true
+	log       = logrus.WithFields(logrus.Fields{"package": "cmd"})
+	// maxRequestTimeout is timeout for the cancellation and fetch requests.
+	// it's high in order to fetch a huge jsons or when the network is slow.
+	maxRequestTimeout = 600 * time.Second
 )
 
 func init() {
@@ -40,12 +43,13 @@ func init() {
 	// Define Persistent Flags and configuration settings, which, if defined here,
 	// will be global for application.
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose")
-	// rootCmd.PersistentFlags().BoolVarP(&epsagonTraceFlag, "epsagon", "e", false, "Enable Epsagon Tracing")
-
 	rootCmd.PersistentFlags().BoolVarP(&traceFlag, "trace", "t", false, "trace")
+	rootCmd.PersistentFlags().BoolVarP(&pprofFlag, "pprof", "P", false, "pprof")
+	rootCmd.PersistentFlags().BoolVarP(&promFlag, "prometheus", "p", false, "prometheus")
+
 	rootCmd.PersistentFlags().StringVar(&config.ClientId, "clientId", "", "ClientId (default is supraworker)")
 
-	rootCmd.PersistentFlags().IntVarP(&numWorkers, "workers", "w", 5, "Number of workers")
+	rootCmd.PersistentFlags().IntVarP(&config.NumWorkers, "workers", "w", 0, "Number of workers")
 	// local flags, which will only run
 	// when this action is called directly.
 
@@ -71,8 +75,7 @@ var rootCmd = &cobra.Command{
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel() // cancel when we are getting the kill signal or exit
 		var wg sync.WaitGroup
-		jobs := make(chan *model.Job, 1)
-		log.Infof("Starting Supraworker\n")
+		log.Infof("Starting %s\n", FormattedVersion())
 		go func() {
 			sig := <-stopChan
 			log.Infof("Shutting down - got %v signal", sig)
@@ -103,50 +106,50 @@ var rootCmd = &cobra.Command{
 		viper.OnConfigChange(func(e fsnotify.Event) {
 			log.Trace("Config file changed:", e.Name)
 			if errCnf := model.ReinitializeConfig(); errCnf != nil {
-				log.Tracef("Failed model.ReinitializeConfig %v\n", errCnf)
+				log.Tracef("Failed ReinitializeConfig %v\n", errCnf)
 			}
 			config.ReinitializeConfig()
 		})
-		// var epsagonConfig *epsagon.Config
-		// if epsagonTraceFlag {
-		// 	epsagonConfig = epsagon.NewTracerConfig(fmt.Sprintf("supraworker-%v", config.C.ClientId), config.GetStringDefault("epsagon_token", ""))
-		// 	epsagonConfig.Debug = true
-		// 	communicator.SetEpsagonHttpWrapper()
-		// }
 
-		addr := config.GetStringTemplatedDefault("healthcheck.listen", ":8080")
-		healthCheckURI := config.GetStringTemplatedDefault("healthcheck.uri", "/health/is_alive")
-		srv := metrics.StartHealthCheck(addr, healthCheckURI)
-		defer metrics.WaitForShutdown(ctx, srv)
+		healthCheckAddr := config.GetStringTemplatedDefault("healthcheck.listen", ":8080")
+		healthCheckUri := config.GetStringTemplatedDefault("healthcheck.uri", "/health/is_alive")
+		metrics.StartHealthCheck(healthCheckAddr, healthCheckUri)
+		if promFlag || config.GetBool("prometheus.enable") {
+			prometheusAddr := config.GetStringTemplatedDefault("prometheus.listen", ":8080")
+			prometheusUri := config.GetStringTemplatedDefault("prometheus.uri", "/metrics")
+			metrics.AddPrometheusMetricsHandler(prometheusAddr, prometheusUri)
+		}
+		if pprofFlag {
+			pprofAddr := config.GetStringTemplatedDefault("pprof.listen", ":8080")
+			pprofUri := config.GetStringTemplatedDefault("pprof.uri", "/debug/pprof")
+			metrics.AddPProf(pprofAddr, pprofUri)
+
+		}
+		//srv := metrics.StartHealthCheck(addr, healthCheckURI)
+		//defer metrics.WaitForShutdown(ctx, srv)
+		metrics.StartAll()
+		defer metrics.StopAll(ctx)
+
+		jobs := make(chan *model.Job, config.C.NumWorkers)
 
 		go func() {
-			if err := job.StartGenerateJobs(ctx, jobs, apiCallDelay); err != nil {
+			if err := job.StartGenerateJobs(ctx, jobs, apiCallDelay, maxRequestTimeout); err != nil {
 				log.Tracef("StartGenerateJobs returned error %v", err)
 			}
 		}()
 
-		config.C.NumWorkers = 0
-		for w := 1; w <= numWorkers; w++ {
+		for w := 1; w <= config.C.NumWorkers; w++ {
 			wg.Add(1)
-			config.C.NumWorkers += 1
 			go worker.StartWorker(w, jobs, &wg)
 		}
 		heartbeatSection := "heartbeat"
 		if config.GetBool(fmt.Sprintf("%v.enable", heartbeatSection)) {
 			heartbeatApiCallDelay := config.GetTimeDurationDefault(heartbeatSection, "interval", apiCallDelay)
-			// if epsagonTraceFlag {
-			// 	go func() {
-			// 		if err := epsagon.ConcurrentGoWrapper(epsagonConfig, heartbeat.StartHeartBeat)(heartbeat_section, heartbeatApiCallDelaySeconds); err != nil {
-			// 			log.Tracef("StartHeartBeat returned error %v", err)
-			// 		}
-			// 	}()
-			// } else {
 			go func() {
 				if err := heartbeat.StartHeartBeat(ctx, heartbeatSection, heartbeatApiCallDelay); err != nil {
 					log.Tracef("StartHeartBeat returned error %v", err)
 				}
 			}()
-			// }
 
 		}
 

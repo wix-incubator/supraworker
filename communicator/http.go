@@ -53,7 +53,6 @@ func NewRestCommunicator() Communicator {
 // NewRestCommunicator prepare struct communicator for HTTP requests
 func NewConfiguredRestCommunicator(section string) (Communicator, error) {
 	comm := NewRestCommunicator()
-	// var cfg_params map[string]interface{}
 	cfgParams := utils.ConvertMapStringToInterface(
 		config.GetStringMapStringTemplated(section, config.CFG_PREFIX_COMMUNICATOR))
 	if _, ok := cfgParams["section"]; !ok {
@@ -77,28 +76,26 @@ func (s *RestCommunicator) Configured() bool {
 	return s.configured
 }
 
-// Configure reads configuration propertoes from global configuration and
+// Configure reads configuration properties from global configuration and
 // from argument.
+// NOTE: There are default headers
 func (s *RestCommunicator) Configure(params map[string]interface{}) error {
-	// log.Warningf("Configure %v", params)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := params["section"]; ok {
-		s.section = params["section"].(string)
+	if val, ok := params["section"]; ok {
+		s.section = fmt.Sprintf("%v", val)
 	}
-	if _, ok := params["param"]; ok {
-		s.param = params["param"].(string)
+	if val, ok := params["param"]; ok {
+		s.param = fmt.Sprintf("%v", val)
 	}
-	// log.Tracef(" s.method %v -> " , s.method)
+	if val, ok := params["method"]; ok {
+		s.method = strings.ToUpper(fmt.Sprintf("%v", val))
+	}
+	if val, ok := params["url"]; ok {
+		s.url = fmt.Sprintf("%v", val)
+	}
 
-	if _, ok := params["method"]; ok {
-		s.method = strings.ToUpper(params["method"].(string))
-	}
-
-	if _, ok := params["url"]; ok {
-		s.url = params["url"].(string)
-	}
 	s.headers = map[string]string{
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
@@ -127,16 +124,20 @@ func (s *RestCommunicator) Configure(params map[string]interface{}) error {
 //                         initialinterval: 10s
 
 func (s *RestCommunicator) Fetch(ctx context.Context, params map[string]interface{}) (result []map[string]interface{}, err error) {
+	try := 0
 	operation := func() error {
 		res, err := s.fetch(ctx, params)
 		if err == nil {
 			result = res
+			//if try > 1 {
+			//	utils.LoggerFromContext(utils.FromRetryID(ctx, try), log).Tracef("Successfully updated %s [%s]", s.url, s.method)
+			//}
 		} else {
-			log.Tracef("Fetch for %v [%v] should retry", s.url, s.method)
+			utils.LoggerFromContext(utils.FromRetryID(ctx, try), log).Tracef("Retrying %s [%s]", s.url, s.method)
 		}
+		try += 1
 		return err
 	}
-	// log.Warningf( "Fetch  %v", params)
 	expBackoff := backoff.NewExponentialBackOff()
 	backoffSection := fmt.Sprintf("%v.%v", s.section, config.CFG_PREFIX_BACKOFF)
 
@@ -152,7 +153,13 @@ func (s *RestCommunicator) Fetch(ctx context.Context, params map[string]interfac
 		config.CFG_PREFIX_BACKOFF_MAXELAPSEDTIME, time.Second); val.Milliseconds() > 0 {
 		expBackoff.MaxElapsedTime = val
 	}
+
+	//var notifyFunc backoff.Notify = func(e error, duration time.Duration) {
+	//	utils.LoggerFromContext(ctx, log).Tracef("Retry on... %s", e)
+	//}
+	//errRetry := backoff.RetryNotify(operation, expBackoff, notifyFunc)
 	errRetry := backoff.Retry(operation, expBackoff)
+
 	return result, errRetry
 
 }
@@ -163,12 +170,17 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 
 	allowedResponseCodes := config.GetIntSlice(s.section,
 		config.CFG_PREFIX_ALLOWED_RESPONSE_CODES, []int{200, 201, 202})
-	if v := ctx.Value(CTX_ALLOWED_RESPONSE_CODES); v != nil {
+	requestTimeout := DefaultRequestTimeout
+	if v := ctx.Value(CtxAllowedResponseCodes); v != nil {
 		if val, ok := v.([]int); ok {
 			allowedResponseCodes = val
 		}
 	}
-
+	if v := ctx.Value(CtxRequestTimeout); v != nil {
+		if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", v)); errParseDuration == nil {
+			requestTimeout = duration
+		}
+	}
 	from := map[string]string{
 		"ClientId":      config.C.ClientId,
 		"ClusterId":     config.C.ClusterId,
@@ -186,9 +198,11 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
+	if len(s.url) < 1 {
+		return nil, nil
+	}
 	allParams := config.GetStringMapStringTemplatedFromMap(s.section, s.param, from)
-	// log.Infof("\nall_params %v\ns.section %v , %v, \nfrom: %v", all_params, s.section, s.param,from)
+	//utils.LoggerFromContext(ctx, log).Infof("[%s] %v\ns.section %v , %v, \nfrom: %v", s.url, allParams, s.section, s.param,from)
 
 	for k, v := range params {
 		if v1, ok := v.(string); ok {
@@ -199,7 +213,7 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 	if len(allParams) > 0 {
 		jsonStr, err = json.Marshal(&allParams)
 		if err != nil {
-			log.Tracef("\nFailed to marshal request %s  to %s \nwith %s\n", s.method, s.url, jsonStr)
+			utils.LoggerFromContext(ctx, log).Tracef("\nFailed to marshal request %s  to %s \nwith %s\n", s.method, s.url, jsonStr)
 			return nil, fmt.Errorf("%w due %s", ErrFailedMarshalRequest, err)
 		}
 
@@ -207,7 +221,6 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 	} else {
 		req, err = http.NewRequest(s.method, s.url, nil)
 	}
-	// log.Warningf("s.method %v, s.url %v ", s.method, s.url)
 	if err != nil {
 		return result, fmt.Errorf("%w due %s", ErrFailedSendRequest, err)
 	}
@@ -215,8 +228,7 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 		req.Header.Set(k, v)
 	}
 
-	// client := &http.Client{Timeout: time.Duration(15 * time.Second)}
-	client := globalHttpClient
+	client := &http.Client{Timeout: requestTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w got %s", ErrFailedSendRequest, err)
@@ -239,9 +251,6 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 		}
 		result = append(result, rawResponse)
 	}
-	// if !utils.ContainsInts(allowed_response_codes, resp.StatusCode) {
-	//     log.Tracef("\nMaking request %s  to %s \nwith %s\nStatusCode %d Response %s\n", s.method, s.url, jsonStr, resp.StatusCode, body)
-	// }
 
 	return result, nil
 

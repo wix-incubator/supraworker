@@ -26,12 +26,13 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 	if err != nil {
 		return fmt.Errorf("%w", communicator.ErrNoSuitableCommunicator)
 	}
-	log.Info(fmt.Sprintf("Starting heartbeat with delay %v", interval))
+	log.Infof("Starting heartbeat with delay %v", interval)
 
 	go func() {
 		tickerHeartBeats := time.NewTicker(interval)
 
 		defer func() {
+			log.Tracef("Stopping hearbeat ticker")
 			tickerHeartBeats.Stop()
 		}()
 
@@ -47,14 +48,14 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 			case <-tickerHeartBeats.C:
 
 				func() {
-					clusterCtx, cancel := context.WithTimeout(ctx, time.Duration(15)*time.Second)
+					heartbeatCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 					// TODO: wrap it in a function –either an anonymous or a named function
 					defer cancel() // cancel when we are getting the kill signal or exit
 					config.C.NumActiveJobs = worker.NumActiveJobs
 					config.C.NumFreeSlots = config.C.NumWorkers - config.C.NumActiveJobs
 					for _, comm := range communicators {
 						_ = comm.Configure(param)
-						res, err := comm.Fetch(clusterCtx, param)
+						res, err := comm.Fetch(heartbeatCtx, param)
 						if err != nil {
 							log.Tracef("Can't send healthcheck %v got %v", err, res)
 							hbFailed += 1
@@ -70,9 +71,9 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 	numFailedHB := <-chanFailedToSentHeartBeats
 
 	if numFailedHB > 0 {
-		log.Info(fmt.Sprintf("Number of failed heatbeats %v of all hertbeats  %v\n", numFailedHB, numSentHB))
+		log.Infof("Number of failed heatbeats %v of all hertbeats  %v\n", numFailedHB, numSentHB)
 	} else {
-		log.Debug(fmt.Sprintf("Number of sent heatbeats %v\n", numSentHB))
+		log.Debugf("Number of sent heatbeats %v\n", numSentHB)
 	}
 	return nil
 

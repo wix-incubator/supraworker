@@ -1,6 +1,12 @@
 package config
 
 var (
+	// Set of constants for fetching Job's REST API
+	CFG_PREFIX_JOBS                 = "jobs"
+	CFG_PREFIX_JOBS_TIMEOUT         = "timeout"
+	CFG_PREFIX_JOB_TIMEOUT_DURATION = "job_max_duration"
+	CFG_PREFIX_JOBS_FETCHER         = "fetch"
+
 	//CFG_PREFIX_COMMUNICATOR defines parameter in the config for Communicators
 	CFG_PREFIX_COMMUNICATOR  = "communicator"
 	CFG_PREFIX_COMMUNICATORS = "communicators"

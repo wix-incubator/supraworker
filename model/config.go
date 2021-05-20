@@ -6,14 +6,6 @@ import (
 	"strings"
 )
 
-// func init() {
-//     viper.WatchConfig()
-//     viper.OnConfigChange(func(e fsnotify.Event) {
-//     	log.Trace("Config file changed:", e.Name)
-//         ReinitializeConfig()
-//     })
-// }
-
 func chooseHttpMethod(provided string, def string) string {
 	provided = strings.ToUpper(provided)
 	switch provided {
@@ -38,7 +30,6 @@ func chooseHttpMethod(provided string, def string) string {
 func ReinitializeConfig() error {
 	if len(viper.GetString("logs.update.url")) > 0 {
 		StreamingAPIURL = viper.GetString("logs.update.url")
-
 	}
 	StreamingAPIMethod = chooseHttpMethod(viper.GetString("logs.update.method"), http.MethodPost)
 	if len(viper.GetString("jobs.get.url")) > 0 {

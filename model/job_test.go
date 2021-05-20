@@ -3,12 +3,13 @@ package model
 import (
 	"bytes"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/weldpua2008/supraworker/config"
 	"github.com/weldpua2008/supraworker/model/cmdtest"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -46,7 +47,7 @@ func TestStreamApi(t *testing.T) {
 		if err != nil {
 			t.Errorf("ReadAll %s", err)
 		}
-		got = string(fmt.Sprintf("%s", b))
+		got = fmt.Sprintf("%s", b)
 		notifyStdoutSent <- true
 	}))
 	defer func() {
@@ -82,11 +83,11 @@ func TestStreamApi(t *testing.T) {
 	case <-notifyStdoutSent:
 		log.Trace("notifyStdoutSent")
 	case <-time.After(10 * time.Second):
-		t.Errorf("timed out")
+		t.Fatalf("timed out")
 	}
 
-	if job.GetStatus() != JOB_STATUS_SUCCESS {
-		t.Errorf("Expected %s, got %s\n", JOB_STATUS_SUCCESS, job.Status)
+	if job.GetStatus() != JOB_STATUS_RUN_OK {
+		t.Errorf("Expected %s, got %s\n", JOB_STATUS_RUN_OK, job.GetStatus())
 	}
 
 	if got != want {
@@ -97,7 +98,6 @@ func TestStreamApi(t *testing.T) {
 // TODO: test on 655361
 func TestLongLineStreamApi(t *testing.T) {
 	repeats := 65531
-	// repeats:= 655361
 	want := fmt.Sprintf("{\"job_uid\":\"job_uid\",\"msg\":\"'%v'\\n\",\"run_uid\":\"1\"}", strings.Repeat("a", repeats))
 	var got string
 	notifyStdoutSent := make(chan bool)
@@ -108,17 +108,14 @@ func TestLongLineStreamApi(t *testing.T) {
 		if err != nil {
 			t.Errorf("ReadAll %s", err)
 		}
-		got = string(fmt.Sprintf("%s", b))
+		got = fmt.Sprintf("%s", b)
 		notifyStdoutSent <- true
 	}))
-	logrus.SetLevel(logrus.TraceLevel)
 	defer func() {
 		srv.Close()
-		// StreamingAPIURL = ""
 		restoreLevel()
 	}()
 	// cmdtest.StartTrace()
-	// StreamingAPIURL = srv.URL
 	viper.SetConfigType("yaml")
 	var yamlExample = []byte(`
     jobs:
@@ -140,21 +137,21 @@ func TestLongLineStreamApi(t *testing.T) {
 	job.ResetBackPressureTimer = time.Duration(450) * time.Millisecond
 	err := job.Run()
 	if err != nil {
-		t.Errorf("Expected no error in %s, got '%v'\n", cmdtest.GetFunctionName(t.Name), err)
+		t.Fatalf("Expected no error in %s, got '%v'\n", cmdtest.GetFunctionName(t.Name), err)
 	}
 	select {
 	case <-notifyStdoutSent:
 		log.Trace("notifyStdoutSent")
 	case <-time.After(5 * time.Second):
-		t.Errorf("timed out")
+		t.Fatalf("timed out")
 	}
 
-	if job.GetStatus() != JOB_STATUS_SUCCESS {
-		t.Errorf("Expected %s, got %s\n", JOB_STATUS_SUCCESS, job.Status)
+	if job.GetStatus() != JOB_STATUS_RUN_OK {
+		t.Fatalf("Expected %s, got %s\n", JOB_STATUS_RUN_OK, job.GetStatus())
 	}
 
 	if got != want {
-		t.Errorf("want %s, got %v", want, got)
+		t.Fatalf("want %s, got %v", want, got)
 	}
 }
 
@@ -163,10 +160,10 @@ func TestExecuteJobSuccess(t *testing.T) {
 	err := job.Run()
 
 	if err != nil {
-		t.Errorf("Expected no error in %s, got %v\n", cmdtest.GetFunctionName(t.Name), err)
+		t.Fatalf("Expected no error in %s, got %v\n", cmdtest.GetFunctionName(t.Name), err)
 	}
-	if job.GetStatus() != JOB_STATUS_SUCCESS {
-		t.Errorf("Expected %s, got %s", JOB_STATUS_SUCCESS, job.Status)
+	if job.GetStatus() != JOB_STATUS_RUN_OK {
+		t.Fatalf("Expected %s, got %s", JOB_STATUS_RUN_OK, job.GetStatus())
 	}
 }
 
@@ -175,10 +172,10 @@ func TestExecuteJobError(t *testing.T) {
 	err := job.Run()
 
 	if err == nil {
-		t.Errorf("Expected  error, got %v\n", err)
+		t.Fatalf("Expected  error, got %v\n", err)
 	}
-	if job.GetStatus() != JOB_STATUS_ERROR {
-		t.Errorf("Expected %s, got %s\n", JOB_STATUS_ERROR, job.Status)
+	if job.GetStatus() != JOB_STATUS_RUN_FAILED {
+		t.Fatalf("Expected %s, got %s\n", JOB_STATUS_RUN_FAILED, job.GetStatus())
 	}
 
 }
@@ -189,45 +186,50 @@ func TestExecuteJobCancel(t *testing.T) {
 	job.TTR = 10000000
 
 	go func() {
-
+		// Run Job in the go routine because it's blocking
 		defer func() { done <- true }()
-		// log.Info("TestExecuteJobCancel")
-		started <- true
 		err := job.Run()
 		if err == nil {
-			done <- true
 			t.Errorf("Expected  error for job %v\n, got %v\n", job, err)
 		}
-		// log.Info(err)
-		// log.Info("TestExecuteJobCancel finished")
 	}()
-	<-started
-	// time.Sleep(10 * time.Millisecond)
-	if job.GetStatus() != JOB_STATUS_IN_PROGRESS {
-		// t.Errorf("job.Status %v",job.Status)
-		time.Sleep(100 * time.Millisecond)
+
+	go func() {
+		// waiting for a status propagation
+		for job.GetStatus() == JOB_STATUS_PENDING {
+			time.Sleep(10 * time.Millisecond)
+		}
+		started <- true
+	}()
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("timed out")
 	}
-	// time.Sleep(10 * time.Millisecond)
 
 	if errUpdate := job.Cancel(); errUpdate != nil {
-		log.Tracef("failed cancel %s status '%s'", job.Id, job.Status)
+		log.Tracef("failed cancel %s status '%s'", job.Id, job.GetStatus())
 	}
 
-	<-done
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("timed out")
+	}
 	if job.GetStatus() != JOB_STATUS_CANCELED {
-		t.Errorf("Expected %s, got %s\n", JOB_STATUS_CANCELED, job.Status)
+		t.Fatalf("Expected %s, got %s\n", JOB_STATUS_CANCELED, job.GetStatus())
 	}
 }
 
 func TestJobFailed(t *testing.T) {
 	job := NewTestJob("echo", "echo")
 	if job.GetStatus() == JOB_STATUS_ERROR {
-		t.Errorf("job.Status '%s' same '%s'\n", job.Status, JOB_STATUS_ERROR)
+		t.Errorf("job.GetStatus() '%s' same '%s'\n", job.GetStatus(), JOB_STATUS_ERROR)
 	}
 	if errUpdate := job.Failed(); errUpdate != nil {
-		log.Tracef("failed Failed %s status '%s'", job.Id, job.Status)
+		log.Tracef("failed Failed %s status '%s'", job.Id, job.GetStatus())
 	}
-	got := job.Status
+	got := job.GetStatus()
 	want := JOB_STATUS_ERROR
 
 	if got != want {
@@ -238,14 +240,14 @@ func TestJobFailed(t *testing.T) {
 func TestJobFinished(t *testing.T) {
 	job := NewTestJob("echo", "echo")
 	if job.GetStatus() == JOB_STATUS_SUCCESS {
-		t.Errorf("job.Status '%s' same '%s'\n", job.Status, JOB_STATUS_SUCCESS)
+		t.Errorf("job.GetStatus() '%s' same '%s'\n", job.GetStatus(), JOB_STATUS_SUCCESS)
 	}
 
 	if errUpdate := job.Finish(); errUpdate != nil {
-		log.Tracef("failed Finish %s status '%s'", job.Id, job.Status)
+		log.Tracef("failed Finish %s status '%s'", job.Id, job.GetStatus())
 	}
 
-	got := job.Status
+	got := job.GetStatus()
 	want := JOB_STATUS_SUCCESS
 
 	if got != want {
@@ -256,13 +258,13 @@ func TestJobFinished(t *testing.T) {
 func TestJobCancel(t *testing.T) {
 	job := NewTestJob("echo", "echo")
 	if job.GetStatus() == JOB_STATUS_CANCELED {
-		t.Errorf("job.Status '%s' same '%s'\n", job.Status, JOB_STATUS_CANCELED)
+		t.Errorf("job.GetStatus() '%s' same '%s'\n", job.GetStatus(), JOB_STATUS_CANCELED)
 	}
 	if errUpdate := job.Cancel(); errUpdate != nil {
-		log.Tracef("failed Cancel %s status '%s'", job.Id, job.Status)
+		log.Tracef("failed Cancel %s status '%s'", job.Id, job.GetStatus())
 	}
 
-	got := job.Status
+	got := job.GetStatus()
 	want := JOB_STATUS_CANCELED
 
 	if got != want {
@@ -284,14 +286,177 @@ func TestJobUpdateActivity(t *testing.T) {
 func TestJobUpdateStatus(t *testing.T) {
 	job := NewTestJob("echo", "echo")
 	if job.GetStatus() == JOB_STATUS_SUCCESS {
-		t.Errorf("job.Status '%s' same '%s'\n", job.Status, JOB_STATUS_PENDING)
+		t.Errorf("job.GetStatus() '%s' same '%s'\n", job.GetStatus(), JOB_STATUS_PENDING)
 	}
 	_ = job.updateStatus(JOB_STATUS_SUCCESS)
-	got := job.Status
+	got := job.GetStatus()
 
 	want := JOB_STATUS_SUCCESS
 
 	if got != want {
 		t.Errorf("got '%s', want '%s'\n", got, want)
+	}
+}
+
+// Test Job status updates via HTTP Communicator
+func TestJobStatusCommunicators(t *testing.T) {
+	isFlakyNow := make(chan bool, 1)
+	out := make(chan string, 1)
+	//cmdtest.StartTrace()
+	srv := config.NewFlakyTestServer(t, out, isFlakyNow, 15*time.Second)
+	defer func() {
+		srv.Close()
+		close(out)
+		//cmdtest.RestoreLevel()
+	}()
+
+	var yamlString = []byte(`
+    ClientId: "Test"
+    version: "1.0"
+    jobs:
+      run: &run
+        communicator: &comm
+          url: "` + srv.URL + `/"
+          method: get
+          params:
+            status: "{{ .Status }}"
+            job_id: "{{ .JobId }}"
+            run_id: "{{ .RunUID}}"
+            extra_run_id: "{{.ExtraRunUID}}"
+            previous_job_status: "{{.PreviousStatus}}"
+          codes:
+          - 200
+          - 201
+          backoff:
+            maxelapsedtime: 30s
+            maxinterval: 20s
+            initialinterval: 0s
+      failed: &failed
+        communicator:
+          <<: *comm
+      finish: &failed
+        communicator:
+          <<: *comm
+      timeout: &timeout
+        communicator:
+          <<: *comm
+      cancel: &cancel
+        communicator:
+          <<: *comm
+    `)
+
+	C, tmpC := config.StringToCfgForTests(t, yamlString)
+	config.C = C
+	defer func() {
+		config.C = tmpC
+	}()
+	outRun := `{ "status": "` + JOB_STATUS_IN_PROGRESS + `" }`
+	cases := []struct {
+		section string
+		in      string
+		out     string
+		cmd     string
+	}{
+		{
+			out:     `{ "status": "` + JOB_STATUS_ERROR + `" }`,
+			section: JOB_STATUS_ERROR,
+			cmd:     "echo S&&exit 1",
+		},
+		{
+			out:     `{ "status": "` + JOB_STATUS_SUCCESS + `" }`,
+			section: JOB_STATUS_SUCCESS,
+			cmd:     "echo S&&exit 0",
+		},
+		{
+			out:     `{ "status": "` + JOB_STATUS_CANCELED + `" }`,
+			section: JOB_STATUS_CANCELED,
+			cmd:     "echo S&&exit 0",
+		},
+		{
+			out:     `{ "status": "` + JOB_STATUS_TIMEOUT + `" }`,
+			section: JOB_STATUS_TIMEOUT,
+			cmd:     "echo S&&exit 0",
+		},
+	}
+	for _, tc := range cases {
+		isFlakyNow <- true
+		job := NewTestJob(fmt.Sprintf("job-%v", cmdtest.GetFunctionName(t.Name)), cmdtest.CMDForTest("echo S&&exit 0"))
+		job.StreamInterval = 1 * time.Millisecond
+		job.ExtraRunUID = "1"
+		job.RunUID = "1"
+		out <- outRun
+		err := job.Run()
+		if err != nil {
+			t.Fatalf("Expected no error in %s, got '%v'\n", cmdtest.GetFunctionName(t.Name), err)
+		}
+		isFlakyNow <- true
+
+		out <- tc.out
+		switch tc.section {
+		case JOB_STATUS_ERROR:
+			if errFail := job.Failed(); errFail != nil {
+				t.Fatalf("[Failed()] got: %v ", errFail)
+			}
+		case JOB_STATUS_SUCCESS:
+			if errFail := job.Finish(); errFail != nil {
+				t.Fatalf("[Finish()] got: %v ", errFail)
+			}
+		case JOB_STATUS_CANCELED:
+			if errFail := job.Cancel(); errFail != nil {
+				t.Fatalf("[Cancel()] got: %v ", errFail)
+			}
+		case JOB_STATUS_TIMEOUT:
+			if errFail := job.Timeout(); errFail != nil {
+				t.Fatalf("[Timeout()] got: %v ", errFail)
+			}
+		}
+	}
+}
+
+func TestJobTimeoutAndCancel(t *testing.T) {
+	var yamlString = []byte(`
+  ClientId: "Test"
+  version: "1.0"
+  `)
+	//logrus.SetLevel(logrus.TraceLevel)
+	C, tmpC := config.StringToCfgForTests(t, yamlString)
+	config.C = C
+	defer func() {
+		config.C = tmpC
+	}()
+	for i := 1; i <= 10; i++ {
+		job := NewJob(fmt.Sprintf("Job-%d", i), "sleep 10000")
+		job.TTR = uint64((1 * time.Millisecond).Milliseconds())
+		chanDone := make(chan bool)
+		startedChan := make(chan bool)
+		go func() {
+			_ = job.Run()
+			chanDone <- true
+		}()
+
+		go func() {
+			// waiting for a status
+			for job.GetStatus() == JOB_STATUS_PENDING {
+				time.Sleep(10 * time.Millisecond)
+			}
+			startedChan <- true
+		}()
+		select {
+		case <-startedChan:
+		case <-time.After(6 * time.Second):
+			t.Logf("runtime.NumGoroutine: %v", runtime.NumGoroutine())
+			buf := make([]byte, 1<<16)
+			runtime.Stack(buf, true)
+			t.Logf("%s", buf)
+			t.Fatalf("timed out")
+		}
+		close(startedChan)
+		time.Sleep(time.Duration(i*10) * time.Millisecond)
+		_ = job.Cancel()
+		<-chanDone
+		close(chanDone)
+		if job.GetStatus() != JOB_STATUS_CANCELED {
+			t.Errorf("job.GetStatus() '%s' same '%s'\n", job.GetStatus(), JOB_STATUS_CANCELED)
+		}
 	}
 }

@@ -1,0 +1,18 @@
+clientId: "clientId"
+version: "1.0"
+jobs:
+    run:
+        communicator: &run
+            method: put
+            params:
+                job_status: "RUNNING"
+                job_id: "{{ .JobId }}"
+                run_id: "{{ .RunUID}}"
+                extra_run_id: "{{.ExtraRunUID}}"
+                previous_job_status: "{{.PreviousStatus}}"
+            codes:
+                - 200
+            backoff:
+                maxelapsedtime: 1300s
+                maxinterval: 1200s
+                initialinterval: 1s

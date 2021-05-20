@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"github.com/weldpua2008/supraworker/utils"
 	"sync"
 	"time"
 )
@@ -30,9 +31,18 @@ func (r *Registry) Add(rec *Job) bool {
 	if _, ok := r.all[rec.StoreKey()]; ok {
 		return false
 	}
-
 	r.all[rec.StoreKey()] = rec
+
 	return true
+}
+
+// Map function
+func (r *Registry) Map(f func(string, *Job)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for k, v := range r.all {
+		f(k, v)
+	}
 }
 
 // Len returns length of registry.
@@ -53,6 +63,7 @@ func (r *Registry) Delete(id string) bool {
 		return false
 	}
 	delete(r.all, id)
+
 	return true
 }
 
@@ -61,21 +72,20 @@ func (r *Registry) Delete(id string) bool {
 // TODO: Consider new timeout status & flow
 //  - Add batch
 func (r *Registry) Cleanup() (num int) {
-	now := time.Now()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for k, v := range r.all {
-		end := v.StartAt.Add(time.Duration(v.TTR) * time.Millisecond)
-		if (v.TTR > 0) && (now.After(end)) {
-			if !IsTerminalStatus(v.Status) {
-				if err := v.Cancel(); err != nil {
-					log.Debug(fmt.Sprintf("failed cancel job %s %v StartAt %v", v.Id, err, v.StartAt))
-				} else {
-					log.Debug(fmt.Sprintf("successfully canceled job %s StartAt %v, TTR %v msec", v.Id, v.StartAt, v.TTR))
-				}
+		if v.HitTimeout() {
+			if err := v.Timeout(); err != nil {
+				utils.LoggerFromContext(*v.GetContext(), log).Debugf("[TIMEOUT] failed %v, Job started at %v, got %v", err, v.StartAt, err)
+			} else {
+				utils.LoggerFromContext(*v.GetContext(), log).Tracef("[TIMEOUT] successfully, Job started at %v, TTR %v", v.StartAt, time.Duration(v.TTR)*time.Millisecond)
 			}
+
 			delete(r.all, k)
 			num += 1
+		} else if len(v.Id) < 1 {
+			log.Tracef("[EMPTY Job] %v", v)
 		}
 
 	}
@@ -86,20 +96,25 @@ func (r *Registry) Cleanup() (num int) {
 // cancel all running & pending job
 // return false if we can't cancel any job
 func (r *Registry) GracefullyShutdown() bool {
-	r.Cleanup()
+	num := r.Cleanup()
+	if num > 0 {
+		log.Debugf("Successfully cleanup '%d' jobs", num)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	failed := false
 	log.Debug("start GracefullyShutdown")
 	for k, v := range r.all {
-		if !IsTerminalStatus(v.Status) {
+		msg := fmt.Sprintf("Deleting job %s", v.Id)
+		if !IsTerminalStatus(v.GetStatus()) {
 			if err := v.Cancel(); err != nil {
-				log.Debug(fmt.Sprintf("failed cancel job %s %v", v.Id, err))
+				msg = fmt.Sprintf("failed cancel job %s %v", v.Id, err)
 				failed = true
 			} else {
-				log.Debug(fmt.Sprintf("successfully canceled job %s", v.Id))
+				msg = fmt.Sprintf("successfully canceled job %s", v.Id)
 			}
 		}
+		log.Debugf(msg)
 		delete(r.all, k)
 	}
 	return failed

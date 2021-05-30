@@ -211,7 +211,6 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 				metrics.FetchNewJobLatency.WithLabelValues(
 					"total", config.C.PrometheusNamespace, config.C.PrometheusService,
 				).Observe(float64(time.Since(start).Nanoseconds()))
-
 			}
 		}
 	}()

@@ -99,7 +99,7 @@ class TestIt(unittest.TestCase):
 
     @num_jobs(NUM_WORKERS)
     def test_failed_jobs(self, num):
-        actual = self.add_jobs_and_wait_statuses(status='FAILED', num=num, cmd='exit 1', ttr='10100')
+        actual = self.add_jobs_and_wait_statuses(status='FAILED', num=num, cmd='echo;exit 1', ttr='10100')
         curr = utils.query(
             f"SELECT * from jobs WHERE status not in ('{self.pending_state}', '{self.promotion_state}') ORDER BY id")
         for row in curr:
@@ -109,7 +109,7 @@ class TestIt(unittest.TestCase):
 
     @num_jobs(NUM_WORKERS)
     def test_cancelled_jobs(self, num):
-        actual = self.add_jobs_and_wait_statuses(status=self.running_state, num=num, cmd='sleep 10000', ttr='1000000')
+        actual = self.add_jobs_and_wait_statuses(status=self.running_state, num=num, cmd='echo;sleep 10000', ttr='1000000')
         utils.query(
             f"UPDATE jobs SET status='{self.cancelled_state}' WHERE status IN ('{self.running_state}')")
 
@@ -124,7 +124,7 @@ class TestIt(unittest.TestCase):
 
     @num_jobs(NUM_WORKERS)
     def test_timeout_jobs(self, num):
-        actual = self.add_jobs_and_wait_statuses(status='TIMEOUT', num=num, cmd='sleep 10000', ttr='3')
+        actual = self.add_jobs_and_wait_statuses(status='TIMEOUT', num=num, cmd='echo;sleep 10000', ttr='3')
 
         curr = utils.query(
             f"SELECT * from jobs WHERE status not in ('{self.pending_state}', '{self.promotion_state}') ORDER BY id")
@@ -137,7 +137,7 @@ class TestIt(unittest.TestCase):
     @num_jobs(NUM_WORKERS)
     def test_success_jobs_more_than_workers(self, n):
         num = n * 2
-        actual = self.add_jobs_and_wait_statuses(status='SUCCESS', num=num, cmd='exit 0', ttr='1001')
+        actual = self.add_jobs_and_wait_statuses(status='SUCCESS', num=num, cmd='echo;exit 0', ttr='1001')
         curr = utils.query(
             f"SELECT * from jobs WHERE status not in ('{self.pending_state}', '{self.promotion_state}') ORDER BY id")
         for row in curr:
@@ -148,7 +148,7 @@ class TestIt(unittest.TestCase):
     @num_jobs(NUM_WORKERS)
     def test_timeout_jobs_more_than_workers(self, n):
         num = n * 2
-        actual = self.add_jobs_and_wait_statuses(status='TIMEOUT', num=num, cmd='sleep 10000', ttr='1')
+        actual = self.add_jobs_and_wait_statuses(status='TIMEOUT', num=num, cmd='echo;sleep 10000', ttr='1')
         sql = f"SELECT * from jobs WHERE status not in ('{self.pending_state}', '{self.promotion_state}') ORDER BY id"
         for row in utils.query(sql):
             if row['status'] != 'TIMEOUT':
@@ -163,7 +163,7 @@ class TestIt(unittest.TestCase):
     @num_jobs(NUM_WORKERS)
     def test_failed_jobs_more_than_workers(self, n):
         num = n * 2
-        actual = self.add_jobs_and_wait_statuses(status='FAILED', num=num, cmd='exit 2', ttr='10100')
+        actual = self.add_jobs_and_wait_statuses(status='FAILED', num=num, cmd='echo;exit 2', ttr='10100')
         sql = f"SELECT * from jobs WHERE status not in ('{self.pending_state}', '{self.promotion_state}') ORDER BY id"
         curr = utils.query(sql)
         for row in utils.query(sql):

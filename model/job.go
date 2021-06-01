@@ -544,10 +544,7 @@ func (j *Job) runcmd() error {
 	status := j.cmd.ProcessState.Sys()
 	ws, ok := status.(syscall.WaitStatus)
 	exitCode := 127
-	if !ok {
-		err = fmt.Errorf("%w got %T", ErrorJobNotInWaitStatus, status)
-		j.exitError = err
-	} else {
+	if ok {
 		exitCode = ws.ExitStatus()
 		if err != nil && !ws.Signaled() {
 			j.GetLogger().Tracef("cmd.Wait for '%v' returned error: %v", j.Id, err)
@@ -570,13 +567,15 @@ func (j *Job) runcmd() error {
 	case exitCode != 0:
 		err = fmt.Errorf("exit code '%d'", exitCode)
 		_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
-	case err == nil:
-		signaled := ws.Signaled()
-		signal := ws.Signal()
-		if signaled {
+	case err == nil && ok:
+		if ws.Signaled() {
+			signal := ws.Signal()
 			err = fmt.Errorf("%w %v", ErrJobGotSignal, signal)
 		}
+	case !ok:
+		err = fmt.Errorf("%w got %T", ErrorJobNotInWaitStatus, status)
 	}
+
 	if !IsTerminalStatus(j.Status) {
 		j.Status = JOB_STATUS_RUN_OK
 		if err != nil {

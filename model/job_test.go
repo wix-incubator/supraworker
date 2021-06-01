@@ -2,6 +2,7 @@ package model
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"github.com/spf13/viper"
 	"github.com/weldpua2008/supraworker/config"
@@ -33,6 +34,38 @@ func TestTerminalStatus(t *testing.T) {
 
 		}
 	}
+}
+
+func TestJobGetLogger(t *testing.T) {
+	ctxWithTimeout, cancelWithTimeout := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancelWithTimeout()
+
+	ctxWithCancel, cancelWithCancel := context.WithCancel(context.Background())
+	defer cancelWithCancel()
+	cases := []struct {
+		ctx context.Context
+	}{
+		{
+			ctx: context.Background(),
+		},
+		{
+			ctx: nil,
+		},
+		{
+			ctx: ctxWithCancel,
+		},
+		{
+			ctx: ctxWithTimeout,
+		},
+	}
+	for _, tc := range cases {
+		for i := 1; i <= 10; i++ {
+			job := NewJob(fmt.Sprintf("Job-%d", i), "sleep 10000")
+			job.ctx = tc.ctx
+			job.GetLogger().Debug("I am working")
+		}
+	}
+
 }
 
 func TestStreamApi(t *testing.T) {

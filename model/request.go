@@ -82,7 +82,10 @@ func GetSliceParamsFromSection(stage string, param string) []string {
 
 // DoApi REST calls via communicators
 func DoApi(ctx context.Context, params map[string]interface{}, stage string) error {
-	//log.Tracef("[DoApi] ctx %v params %v stage %v", ctx, params, stage)
+	//defer func() {
+	//	//log.Tracef("http.Client stop")
+	//	log.Tracef("[DoApi] ctx %v params %v stage %v", ctx, params, stage)
+	//}()
 	section := fmt.Sprintf("%v.%v",
 		config.CFG_PREFIX_JOBS, stage)
 	if ctx == nil {
@@ -95,6 +98,9 @@ func DoApi(ctx context.Context, params map[string]interface{}, stage string) err
 		} else {
 			log.Tracef("[DoApi] Cannot parse duration %v stage %v", errParseDuration, stage)
 		}
+	}
+	if defaultRequestTimeout < 1 {
+		defaultRequestTimeout = communicator.DefaultRequestTimeout
 	}
 	allCommunicators, errGetCommunicators := communicator.GetCommunicatorsFromSection(section)
 	if errGetCommunicators != nil {
@@ -152,11 +158,15 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 		if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
 			if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", value)); errParseDuration == nil {
 				defaultRequestTimeout = duration
-			} else {
+			} /* else {
 				return fmt.Errorf("Cannot parse duration %v", errParseDuration), nil
-			}
+			} */
 		}
 	}
+	if defaultRequestTimeout < 1 {
+		defaultRequestTimeout = communicator.DefaultRequestTimeout
+	}
+	//log.Tracef("http.Client")
 	client := &http.Client{Timeout: defaultRequestTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -221,12 +231,14 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 		if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
 			if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", value)); errParseDuration == nil {
 				defaultRequestTimeout = duration
-			} else {
+			} /* else {
 				return fmt.Errorf("Cannot parse duration %v", errParseDuration), nil
-			}
+			} */
 		}
 	}
-
+	if defaultRequestTimeout < 1 {
+		defaultRequestTimeout = communicator.DefaultRequestTimeout
+	}
 	client := &http.Client{Timeout: defaultRequestTimeout}
 	resp, err := client.Do(req)
 	if err != nil {

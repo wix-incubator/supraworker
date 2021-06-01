@@ -3,7 +3,7 @@ Logs management.
 
 All functions for read, list, delete and append logs.
 """
-
+import time
 import traceback
 import os
 import logging
@@ -12,6 +12,7 @@ import urllib.parse
 from flask import jsonify
 from flask import Blueprint, current_app, make_response
 from flask_restx import Api, Resource, fields, reqparse
+from random import getrandbits
 
 logger = logging.getLogger(__name__)
 logs_page = Blueprint('run_log_page', __name__)
@@ -27,6 +28,13 @@ log_api = Api(
 model_validation_response = log_api.model('ValidationModel', {
     'message': fields.String(required=False, description='Error message'),
 })
+
+
+def flaky():
+    if bool(getrandbits(1)):
+        # raise RuntimeError("Flaky response")
+        logger.warning("flaky logs")
+        time.sleep(12000)
 
 
 def _params_to_filename(job_id, run_id, extra_run_id):
@@ -229,6 +237,7 @@ class LogUploader(Resource):
         }
         status_code = 500
         try:
+            # flaky()
             with open(fn, "a") as myfile:
                 myfile.write(args.msg)
             status_code = 200

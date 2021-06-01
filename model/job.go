@@ -196,14 +196,18 @@ func (j *Job) stopProcess() (cancelError error) {
 				j.GetLogger().Warnf("Can't fetch process tree, got %v", errTree)
 			}
 			if err := j.cmd.Process.Kill(); err != nil {
-				status := j.cmd.ProcessState.Sys().(syscall.WaitStatus)
-				exitStatus := status.ExitStatus()
-				signaled := status.Signaled()
-				signal := status.Signal()
-				//cancelError = fmt.Errorf("failed to kill process: %s", err)
-				if !signaled && exitStatus == 0 {
-					cancelError = fmt.Errorf("unexpected: err %v, exitStatus was %v + signal %s, while running: %s", err, exitStatus, signal, j.CMD)
+				status := j.cmd.ProcessState.Sys()
+				ws, ok := status.(syscall.WaitStatus)
+				if ok {
+					exitStatus := ws.ExitStatus()
+					signaled := ws.Signaled()
+					signal := ws.Signal()
+					//cancelError = fmt.Errorf("failed to kill process: %s", err)
+					if !signaled && exitStatus == 0 {
+						cancelError = fmt.Errorf("unexpected: err %v, exitStatus was %v + signal %s, while running: %s", err, exitStatus, signal, j.CMD)
+					}
 				}
+
 			}
 			if processList, err := ps.Processes(); err == nil {
 				for aux := range processList {
@@ -388,6 +392,8 @@ func (j *Job) FlushSteamsBuffer() error {
 func (j *Job) doSendSteamBuf() error {
 	j.streamsMu.Lock()
 	defer j.streamsMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 	if j.streamsBuf != nil && len(j.streamsBuf) > 0 {
 		// j.GetLogger().Tracef("doSendSteamBuf for '%v' len '%v' %v\n ", j.Id, len(j.streamsBuf),j.streamsBuf)
 
@@ -398,8 +404,20 @@ func (j *Job) doSendSteamBuf() error {
 		if urlProvided(stage) {
 			// log.Tracef("Using DoApiCall for Streaming")
 			params["msg"] = strings.Join(j.streamsBuf, "")
-			if errApi, result := DoApiCall(context.Background(), params, stage); errApi != nil {
-				j.GetLogger().Tracef("failed to update api, got: %s and %s\n", result, errApi)
+			doneChan := make(chan bool)
+			go func() {
+				defer func() {
+					doneChan <- true
+				}()
+				if errApi, result := DoApiCall(ctx, params, stage); errApi != nil {
+					j.GetLogger().Tracef("failed to update api, got: %s and %s\n", result, errApi)
+				}
+			}()
+
+			select {
+			case <-doneChan:
+			case <-time.After(6 * time.Minute):
+				j.GetLogger().Tracef("Timeout before updated api stage %s", stage)
 			}
 
 		} else {
@@ -524,6 +542,7 @@ func (j *Job) runcmd() error {
 	<-notifyStdoutSent
 	<-notifyStderrSent
 	j.mu.Lock()
+	defer j.mu.Unlock()
 	// The returned error is nil if the command runs, has
 	// no problems copying stdin, stdout, and stderr,
 	// and exits with a zero exit status.
@@ -532,29 +551,20 @@ func (j *Job) runcmd() error {
 	// signal that we've read all logs
 
 	j.notifyStopStreams <- struct{}{}
-	j.mu.Unlock()
-	if err != nil {
-		status := j.cmd.ProcessState.Sys().(syscall.WaitStatus)
-		signaled := status.Signaled()
-
-		if !signaled {
-			j.GetLogger().Tracef("cmd.Wait for '%v' returned error: %v", j.Id, err)
-		} /* else {
-			log.Tracef("Got Signal: %v, while running: %s", status.Signal(), j.CMD)
-		}
-		*/
-	}
-
-	j.mu.Lock()
-	defer j.mu.Unlock()
+	//j.mu.Unlock()
+	//
+	//j.mu.Lock()
+	//defer j.mu.Unlock()
 	status := j.cmd.ProcessState.Sys()
 	ws, ok := status.(syscall.WaitStatus)
-
-	if !ok {
-		err = fmt.Errorf("%w got %T", ErrorJobNotInWaitStatus, status)
-		j.exitError = err
+	exitCode := 127
+	if ok {
+		exitCode = ws.ExitStatus()
+		if err != nil && !ws.Signaled() {
+			j.GetLogger().Tracef("cmd.Wait for '%v' returned error: %v", j.Id, err)
+		}
 	}
-	exitCode := ws.ExitStatus()
+
 	j.ExitCode = exitCode
 	j.alreadyStopped = true
 
@@ -571,13 +581,15 @@ func (j *Job) runcmd() error {
 	case exitCode != 0:
 		err = fmt.Errorf("exit code '%d'", exitCode)
 		_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
-	case err == nil:
-		signaled := ws.Signaled()
-		signal := ws.Signal()
-		if signaled {
+	case err == nil && ok:
+		if ws.Signaled() {
+			signal := ws.Signal()
 			err = fmt.Errorf("%w %v", ErrJobGotSignal, signal)
 		}
+	case !ok:
+		err = fmt.Errorf("%w got %T", ErrorJobNotInWaitStatus, status)
 	}
+
 	if !IsTerminalStatus(j.Status) {
 		j.Status = JOB_STATUS_RUN_OK
 		if err != nil {

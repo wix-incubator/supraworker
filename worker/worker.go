@@ -87,6 +87,5 @@ func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
 
 		jobsProcessed.Inc()
 		job.JobsRegistry.Delete(j.StoreKey())
-
 	}
 }

@@ -484,7 +484,7 @@ func TestJobTimeoutAndCancel(t *testing.T) {
 			t.Fatalf("timed out")
 		}
 		close(startedChan)
-		time.Sleep(time.Duration(i*10) * time.Millisecond)
+		//time.Sleep(time.Duration(i*10) * time.Millisecond)
 		_ = job.Cancel()
 		<-chanDone
 		close(chanDone)

@@ -392,6 +392,8 @@ func (j *Job) FlushSteamsBuffer() error {
 func (j *Job) doSendSteamBuf() error {
 	j.streamsMu.Lock()
 	defer j.streamsMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 	if j.streamsBuf != nil && len(j.streamsBuf) > 0 {
 		// j.GetLogger().Tracef("doSendSteamBuf for '%v' len '%v' %v\n ", j.Id, len(j.streamsBuf),j.streamsBuf)
 
@@ -402,8 +404,20 @@ func (j *Job) doSendSteamBuf() error {
 		if urlProvided(stage) {
 			// log.Tracef("Using DoApiCall for Streaming")
 			params["msg"] = strings.Join(j.streamsBuf, "")
-			if errApi, result := DoApiCall(context.Background(), params, stage); errApi != nil {
-				j.GetLogger().Tracef("failed to update api, got: %s and %s\n", result, errApi)
+			doneChan := make(chan bool)
+			go func() {
+				defer func() {
+					doneChan <- true
+				}()
+				if errApi, result := DoApiCall(ctx, params, stage); errApi != nil {
+					j.GetLogger().Tracef("failed to update api, got: %s and %s\n", result, errApi)
+				}
+			}()
+
+			select {
+			case <-doneChan:
+			case <-time.After(6 * time.Minute):
+				j.GetLogger().Tracef("Timeout before updated api stage %s", stage)
 			}
 
 		} else {

@@ -171,7 +171,7 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 	allowedResponseCodes := config.GetIntSlice(s.section,
 		config.CFG_PREFIX_ALLOWED_RESPONSE_CODES, []int{200, 201, 202})
 	requestTimeout := DefaultRequestTimeout
-	ctxReq:= context.Background()
+	ctxReq := context.Background()
 	if ctx != nil {
 		if v := ctx.Value(CtxAllowedResponseCodes); v != nil {
 			if val, ok := v.([]int); ok {
@@ -226,9 +226,9 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 			return nil, fmt.Errorf("%w due %s", ErrFailedMarshalRequest, err)
 		}
 
-		req, err = http.NewRequestWithContext(ctxReqCancel,s.method, s.url, bytes.NewBuffer(jsonStr))
+		req, err = http.NewRequestWithContext(ctxReqCancel, s.method, s.url, bytes.NewBuffer(jsonStr))
 	} else {
-		req, err = http.NewRequestWithContext(ctxReqCancel,s.method, s.url, nil)
+		req, err = http.NewRequestWithContext(ctxReqCancel, s.method, s.url, nil)
 	}
 	if err != nil {
 		return result, fmt.Errorf("%w due %s", ErrFailedSendRequest, err)
@@ -239,7 +239,7 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 
 	client := &http.Client{Timeout: requestTimeout}
 	resp, err := client.Do(req)
-	if resp!=nil {
+	if resp != nil {
 		defer resp.Body.Close()
 	}
 	if err != nil {

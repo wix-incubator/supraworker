@@ -137,7 +137,7 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 	var err error
 	var jsonStr []byte
 	defaultRequestTimeout := communicator.DefaultRequestTimeout
-	ctxReq:= context.Background()
+	ctxReq := context.Background()
 	if ctx != nil {
 		ctxReq = ctx
 		if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
@@ -153,7 +153,6 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 	}
 	ctxReqCancel, cancel := context.WithTimeout(ctxReq, defaultRequestTimeout)
 	defer cancel()
-
 
 	if len(params) > 0 {
 		jsonStr, err = json.Marshal(&params)
@@ -177,7 +176,7 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 	if resp != nil {
 		defer resp.Body.Close()
 	}
-	if e,ok := err.(net.Error); ok && e.Timeout() {
+	if e, ok := err.(net.Error); ok && e.Timeout() {
 		return fmt.Errorf("Do request timeout: %s", err), nil
 	} else if err != nil {
 		return fmt.Errorf("Failed to send request due %s", err), nil
@@ -220,7 +219,7 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 	var req *http.Request
 	var err error
 	defaultRequestTimeout := communicator.DefaultRequestTimeout
-	ctxReq:= context.Background()
+	ctxReq := context.Background()
 	if ctx != nil {
 		ctxReq = ctx
 		if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
@@ -237,14 +236,13 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 	ctxReqCancel, cancel := context.WithTimeout(ctxReq, defaultRequestTimeout)
 	defer cancel()
 
-
 	if len(c) > 0 {
 		jsonStr, errMarsh := json.Marshal(&c)
 
 		if errMarsh != nil {
 			return fmt.Errorf("Failed to marshal request due %s", errMarsh), nil
 		}
-		req, err = http.NewRequestWithContext(ctxReqCancel,method, url, bytes.NewBuffer(jsonStr))
+		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, bytes.NewBuffer(jsonStr))
 	} else {
 		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, nil)
 	}
@@ -258,7 +256,7 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 	if resp != nil {
 		defer resp.Body.Close()
 	}
-	if e,ok := err.(net.Error); ok && e.Timeout() {
+	if e, ok := err.(net.Error); ok && e.Timeout() {
 		return fmt.Errorf("Do request timeout: %s", err), nil
 	} else if err != nil {
 		return fmt.Errorf("Failed to send request due %s", err), nil

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/weldpua2008/supraworker/communicator"
+	"net"
 
 	// "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -135,26 +136,11 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 	var req *http.Request
 	var err error
 	var jsonStr []byte
-	if len(params) > 0 {
-		jsonStr, err = json.Marshal(&params)
-		if err != nil {
-			log.Trace(fmt.Sprintf("\nFailed to marshal request %s  to %s \nwith %s\n", method, url, jsonStr))
-			return fmt.Errorf("Failed to marshal request due %s", err), nil
-		}
-
-		req, err = http.NewRequest(method, url, bytes.NewBuffer(jsonStr))
-	} else {
-		req, err = http.NewRequest(method, url, nil)
-	}
-	if err != nil {
-		return fmt.Errorf("Failed to create request due %s", err), nil
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
 	defaultRequestTimeout := communicator.DefaultRequestTimeout
+	ctxReq:= context.Background()
 	// TODO: Add a test
 	if ctx != nil {
+		ctxReq = ctx
 		if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
 			if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", value)); errParseDuration == nil {
 				defaultRequestTimeout = duration
@@ -166,13 +152,37 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 	if defaultRequestTimeout < 1 {
 		defaultRequestTimeout = communicator.DefaultRequestTimeout
 	}
-	//log.Tracef("http.Client")
+	ctxReqCancel, cancel := context.WithTimeout(ctxReq, defaultRequestTimeout)
+	defer cancel()
+
+
+	if len(params) > 0 {
+		jsonStr, err = json.Marshal(&params)
+		if err != nil {
+			log.Trace(fmt.Sprintf("\nFailed to marshal request %s  to %s \nwith %s\n", method, url, jsonStr))
+			return fmt.Errorf("Failed to marshal request due %s", err), nil
+		}
+
+		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, bytes.NewBuffer(jsonStr))
+	} else {
+		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, nil)
+	}
+	if err != nil {
+		return fmt.Errorf("Failed to create request due %s", err), nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
 	client := &http.Client{Timeout: defaultRequestTimeout}
 	resp, err := client.Do(req)
-	if err != nil {
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if e,ok := err.(net.Error); ok && e.Timeout() {
+		return fmt.Errorf("Do request timeout: %s", err), nil
+	} else if err != nil {
 		return fmt.Errorf("Failed to send request due %s", err), nil
 	}
-	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error read response body got %s", err), nil

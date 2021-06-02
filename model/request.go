@@ -43,7 +43,7 @@ func GetParamsFromSection(stage string, param string) map[string]string {
 		var tplBytes bytes.Buffer
 		tpl, err := template.New("params").Parse(v)
 		if err != nil {
-			log.Tracef("stage %s params executing template: %s",stage, err)
+			log.Tracef("stage %s params executing template: %s", stage, err)
 			continue
 		}
 		err = tpl.Execute(&tplBytes, config.C)
@@ -75,7 +75,7 @@ func GetSliceParamsFromSection(stage string, param string) []string {
 		var tplBytes bytes.Buffer
 		tpl, err := template.New("params").Parse(v)
 		if err != nil {
-			log.Tracef("stage %s params executing template: %s",stage, err)
+			log.Tracef("stage %s params executing template: %s", stage, err)
 			continue
 		}
 		err = tpl.Execute(&tplBytes, config.C)

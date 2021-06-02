@@ -138,7 +138,6 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 	var jsonStr []byte
 	defaultRequestTimeout := communicator.DefaultRequestTimeout
 	ctxReq:= context.Background()
-	// TODO: Add a test
 	if ctx != nil {
 		ctxReq = ctx
 		if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
@@ -220,24 +219,10 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 	}
 	var req *http.Request
 	var err error
-	if len(c) > 0 {
-		jsonStr, errMarsh := json.Marshal(&c)
-
-		if errMarsh != nil {
-			return fmt.Errorf("Failed to marshal request due %s", errMarsh), nil
-		}
-		req, err = http.NewRequest(method, url, bytes.NewBuffer(jsonStr))
-	} else {
-		req, err = http.NewRequest(method, url, nil)
-	}
-	if err != nil {
-		return fmt.Errorf("Failed to create new request due %s", err), nil
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
 	defaultRequestTimeout := communicator.DefaultRequestTimeout
-	// TODO: Add a test
+	ctxReq:= context.Background()
 	if ctx != nil {
+		ctxReq = ctx
 		if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
 			if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", value)); errParseDuration == nil {
 				defaultRequestTimeout = duration
@@ -249,12 +234,35 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 	if defaultRequestTimeout < 1 {
 		defaultRequestTimeout = communicator.DefaultRequestTimeout
 	}
+	ctxReqCancel, cancel := context.WithTimeout(ctxReq, defaultRequestTimeout)
+	defer cancel()
+
+
+	if len(c) > 0 {
+		jsonStr, errMarsh := json.Marshal(&c)
+
+		if errMarsh != nil {
+			return fmt.Errorf("Failed to marshal request due %s", errMarsh), nil
+		}
+		req, err = http.NewRequestWithContext(ctxReqCancel,method, url, bytes.NewBuffer(jsonStr))
+	} else {
+		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, nil)
+	}
+	if err != nil {
+		return fmt.Errorf("Failed to create new request due %s", err), nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 	client := &http.Client{Timeout: defaultRequestTimeout}
 	resp, err := client.Do(req)
-	if err != nil {
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if e,ok := err.(net.Error); ok && e.Timeout() {
+		return fmt.Errorf("Do request timeout: %s", err), nil
+	} else if err != nil {
 		return fmt.Errorf("Failed to send request due %s", err), nil
 	}
-	defer resp.Body.Close()
 	if body, err := ioutil.ReadAll(resp.Body); err == nil {
 		if (resp.StatusCode > 202) || (resp.StatusCode < 200) {
 			log.Tracef("StatusCode %d Response %s", resp.StatusCode, body)

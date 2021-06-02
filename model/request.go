@@ -37,13 +37,16 @@ func GetAPIParamsFromSection(stage string) map[string]string {
 //       "job_uid": "job_uid"
 //       "run_uid": "1"
 func GetParamsFromSection(stage string, param string) map[string]string {
-	// log.Tracef("Calling GetParamsFromSection(%s,%s)",stage, param)
 	c := make(map[string]string)
 	params := viper.GetStringMapString(fmt.Sprintf("%s.%s", stage, param))
 	for k, v := range params {
 		var tplBytes bytes.Buffer
-		tpl := template.Must(template.New("params").Parse(v))
-		err := tpl.Execute(&tplBytes, config.C)
+		tpl, err := template.New("params").Parse(v)
+		if err != nil {
+			log.Tracef("stage %s params executing template: %s",stage, err)
+			continue
+		}
+		err = tpl.Execute(&tplBytes, config.C)
 		if err != nil {
 			log.Tracef("params executing template: %s", err)
 			continue
@@ -70,8 +73,12 @@ func GetSliceParamsFromSection(stage string, param string) []string {
 	params := viper.GetStringSlice(fmt.Sprintf("%s.%s", stage, param))
 	for _, v := range params {
 		var tplBytes bytes.Buffer
-		tpl := template.Must(template.New("params").Parse(v))
-		err := tpl.Execute(&tplBytes, config.C)
+		tpl, err := template.New("params").Parse(v)
+		if err != nil {
+			log.Tracef("stage %s params executing template: %s",stage, err)
+			continue
+		}
+		err = tpl.Execute(&tplBytes, config.C)
 		if err != nil {
 			log.Tracef("params executing template: %s", err)
 			continue
@@ -206,15 +213,19 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 	var rawResponse map[string]interface{}
 
 	t := viper.GetStringMapString(section)
-	c := make(map[string]string)
+	reqSendJsonMap := make(map[string]string)
 	for k, v := range t {
 		var tplBytes bytes.Buffer
-		tpl := template.Must(template.New("params").Parse(v))
-		err := tpl.Execute(&tplBytes, config.C)
+		tpl, err := template.New("params").Parse(v)
+		if err != nil {
+			log.Warn("executing template:", err)
+			continue
+		}
+		err = tpl.Execute(&tplBytes, config.C)
 		if err != nil {
 			log.Warn("executing template:", err)
 		}
-		c[k] = tplBytes.String()
+		reqSendJsonMap[k] = tplBytes.String()
 	}
 	var req *http.Request
 	var err error
@@ -236,13 +247,13 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 	ctxReqCancel, cancel := context.WithTimeout(ctxReq, defaultRequestTimeout)
 	defer cancel()
 
-	if len(c) > 0 {
-		jsonStr, errMarsh := json.Marshal(&c)
+	if len(reqSendJsonMap) > 0 {
+		reqJsonStr, errMarsh := json.Marshal(&reqSendJsonMap)
 
 		if errMarsh != nil {
 			return fmt.Errorf("Failed to marshal request due %s", errMarsh), nil
 		}
-		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, bytes.NewBuffer(jsonStr))
+		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, bytes.NewBuffer(reqJsonStr))
 	} else {
 		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, nil)
 	}

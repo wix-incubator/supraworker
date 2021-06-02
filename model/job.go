@@ -277,10 +277,7 @@ func (j *Job) HitTimeout() bool {
 	}
 	now := time.Now()
 	end := j.StartAt.Add(time.Duration(j.TTR) * time.Millisecond)
-	if now.After(end) {
-		return true
-	}
-	return false
+	return now.After(end)
 }
 
 // Timeout job flow

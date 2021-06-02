@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/weldpua2008/supraworker/communicator"
+	"net"
 
 	// "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -36,13 +37,16 @@ func GetAPIParamsFromSection(stage string) map[string]string {
 //       "job_uid": "job_uid"
 //       "run_uid": "1"
 func GetParamsFromSection(stage string, param string) map[string]string {
-	// log.Tracef("Calling GetParamsFromSection(%s,%s)",stage, param)
 	c := make(map[string]string)
 	params := viper.GetStringMapString(fmt.Sprintf("%s.%s", stage, param))
 	for k, v := range params {
 		var tplBytes bytes.Buffer
-		tpl := template.Must(template.New("params").Parse(v))
-		err := tpl.Execute(&tplBytes, config.C)
+		tpl, err := template.New("params").Parse(v)
+		if err != nil {
+			log.Tracef("stage %s params executing template: %s", stage, err)
+			continue
+		}
+		err = tpl.Execute(&tplBytes, config.C)
 		if err != nil {
 			log.Tracef("params executing template: %s", err)
 			continue
@@ -69,8 +73,12 @@ func GetSliceParamsFromSection(stage string, param string) []string {
 	params := viper.GetStringSlice(fmt.Sprintf("%s.%s", stage, param))
 	for _, v := range params {
 		var tplBytes bytes.Buffer
-		tpl := template.Must(template.New("params").Parse(v))
-		err := tpl.Execute(&tplBytes, config.C)
+		tpl, err := template.New("params").Parse(v)
+		if err != nil {
+			log.Tracef("stage %s params executing template: %s", stage, err)
+			continue
+		}
+		err = tpl.Execute(&tplBytes, config.C)
 		if err != nil {
 			log.Tracef("params executing template: %s", err)
 			continue
@@ -135,26 +143,10 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 	var req *http.Request
 	var err error
 	var jsonStr []byte
-	if len(params) > 0 {
-		jsonStr, err = json.Marshal(&params)
-		if err != nil {
-			log.Trace(fmt.Sprintf("\nFailed to marshal request %s  to %s \nwith %s\n", method, url, jsonStr))
-			return fmt.Errorf("Failed to marshal request due %s", err), nil
-		}
-
-		req, err = http.NewRequest(method, url, bytes.NewBuffer(jsonStr))
-	} else {
-		req, err = http.NewRequest(method, url, nil)
-	}
-	if err != nil {
-		return fmt.Errorf("Failed to create request due %s", err), nil
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
 	defaultRequestTimeout := communicator.DefaultRequestTimeout
-	// TODO: Add a test
+	ctxReq := context.Background()
 	if ctx != nil {
+		ctxReq = ctx
 		if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
 			if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", value)); errParseDuration == nil {
 				defaultRequestTimeout = duration
@@ -166,13 +158,36 @@ func DoApiCall(ctx context.Context, params map[string]string, stage string) (err
 	if defaultRequestTimeout < 1 {
 		defaultRequestTimeout = communicator.DefaultRequestTimeout
 	}
-	//log.Tracef("http.Client")
+	ctxReqCancel, cancel := context.WithTimeout(ctxReq, defaultRequestTimeout)
+	defer cancel()
+
+	if len(params) > 0 {
+		jsonStr, err = json.Marshal(&params)
+		if err != nil {
+			log.Trace(fmt.Sprintf("\nFailed to marshal request %s  to %s \nwith %s\n", method, url, jsonStr))
+			return fmt.Errorf("Failed to marshal request due %s", err), nil
+		}
+
+		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, bytes.NewBuffer(jsonStr))
+	} else {
+		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, nil)
+	}
+	if err != nil {
+		return fmt.Errorf("Failed to create request due %s", err), nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
 	client := &http.Client{Timeout: defaultRequestTimeout}
 	resp, err := client.Do(req)
-	if err != nil {
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if e, ok := err.(net.Error); ok && e.Timeout() {
+		return fmt.Errorf("Do request timeout: %s", err), nil
+	} else if err != nil {
 		return fmt.Errorf("Failed to send request due %s", err), nil
 	}
-	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error read response body got %s", err), nil
@@ -198,36 +213,26 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 	var rawResponse map[string]interface{}
 
 	t := viper.GetStringMapString(section)
-	c := make(map[string]string)
+	reqSendJsonMap := make(map[string]string)
 	for k, v := range t {
 		var tplBytes bytes.Buffer
-		tpl := template.Must(template.New("params").Parse(v))
-		err := tpl.Execute(&tplBytes, config.C)
+		tpl, err := template.New("params").Parse(v)
+		if err != nil {
+			log.Warn("executing template:", err)
+			continue
+		}
+		err = tpl.Execute(&tplBytes, config.C)
 		if err != nil {
 			log.Warn("executing template:", err)
 		}
-		c[k] = tplBytes.String()
+		reqSendJsonMap[k] = tplBytes.String()
 	}
 	var req *http.Request
 	var err error
-	if len(c) > 0 {
-		jsonStr, errMarsh := json.Marshal(&c)
-
-		if errMarsh != nil {
-			return fmt.Errorf("Failed to marshal request due %s", errMarsh), nil
-		}
-		req, err = http.NewRequest(method, url, bytes.NewBuffer(jsonStr))
-	} else {
-		req, err = http.NewRequest(method, url, nil)
-	}
-	if err != nil {
-		return fmt.Errorf("Failed to create new request due %s", err), nil
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
 	defaultRequestTimeout := communicator.DefaultRequestTimeout
-	// TODO: Add a test
+	ctxReq := context.Background()
 	if ctx != nil {
+		ctxReq = ctx
 		if value := ctx.Value(CtxKeyRequestTimeout); value != nil {
 			if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", value)); errParseDuration == nil {
 				defaultRequestTimeout = duration
@@ -239,12 +244,34 @@ func NewRemoteApiRequest(ctx context.Context, section string, method string, url
 	if defaultRequestTimeout < 1 {
 		defaultRequestTimeout = communicator.DefaultRequestTimeout
 	}
+	ctxReqCancel, cancel := context.WithTimeout(ctxReq, defaultRequestTimeout)
+	defer cancel()
+
+	if len(reqSendJsonMap) > 0 {
+		reqJsonStr, errMarsh := json.Marshal(&reqSendJsonMap)
+
+		if errMarsh != nil {
+			return fmt.Errorf("Failed to marshal request due %s", errMarsh), nil
+		}
+		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, bytes.NewBuffer(reqJsonStr))
+	} else {
+		req, err = http.NewRequestWithContext(ctxReqCancel, method, url, nil)
+	}
+	if err != nil {
+		return fmt.Errorf("Failed to create new request due %s", err), nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 	client := &http.Client{Timeout: defaultRequestTimeout}
 	resp, err := client.Do(req)
-	if err != nil {
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if e, ok := err.(net.Error); ok && e.Timeout() {
+		return fmt.Errorf("Do request timeout: %s", err), nil
+	} else if err != nil {
 		return fmt.Errorf("Failed to send request due %s", err), nil
 	}
-	defer resp.Body.Close()
 	if body, err := ioutil.ReadAll(resp.Body); err == nil {
 		if (resp.StatusCode > 202) || (resp.StatusCode < 200) {
 			log.Tracef("StatusCode %d Response %s", resp.StatusCode, body)

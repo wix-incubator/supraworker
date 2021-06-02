@@ -171,16 +171,25 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 	allowedResponseCodes := config.GetIntSlice(s.section,
 		config.CFG_PREFIX_ALLOWED_RESPONSE_CODES, []int{200, 201, 202})
 	requestTimeout := DefaultRequestTimeout
-	if v := ctx.Value(CtxAllowedResponseCodes); v != nil {
-		if val, ok := v.([]int); ok {
-			allowedResponseCodes = val
+	ctxReq := context.Background()
+	if ctx != nil {
+		if v := ctx.Value(CtxAllowedResponseCodes); v != nil {
+			if val, ok := v.([]int); ok {
+				allowedResponseCodes = val
+			}
+		}
+		if v := ctx.Value(CtxRequestTimeout); v != nil {
+			if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", v)); errParseDuration == nil {
+				requestTimeout = duration
+			}
 		}
 	}
-	if v := ctx.Value(CtxRequestTimeout); v != nil {
-		if duration, errParseDuration := time.ParseDuration(fmt.Sprintf("%v", v)); errParseDuration == nil {
-			requestTimeout = duration
-		}
+	if requestTimeout < 1 {
+		requestTimeout = DefaultRequestTimeout
 	}
+	ctxReqCancel, cancel := context.WithTimeout(ctxReq, requestTimeout)
+	defer cancel()
+
 	from := map[string]string{
 		"ClientId":      config.C.ClientId,
 		"ClusterId":     config.C.ClusterId,
@@ -217,9 +226,9 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 			return nil, fmt.Errorf("%w due %s", ErrFailedMarshalRequest, err)
 		}
 
-		req, err = http.NewRequest(s.method, s.url, bytes.NewBuffer(jsonStr))
+		req, err = http.NewRequestWithContext(ctxReqCancel, s.method, s.url, bytes.NewBuffer(jsonStr))
 	} else {
-		req, err = http.NewRequest(s.method, s.url, nil)
+		req, err = http.NewRequestWithContext(ctxReqCancel, s.method, s.url, nil)
 	}
 	if err != nil {
 		return result, fmt.Errorf("%w due %s", ErrFailedSendRequest, err)
@@ -230,10 +239,12 @@ func (s *RestCommunicator) fetch(ctx context.Context, params map[string]interfac
 
 	client := &http.Client{Timeout: requestTimeout}
 	resp, err := client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w got %s", ErrFailedSendRequest, err)
 	}
-	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("%w got %s", ErrFailedReadResponseBody, err)

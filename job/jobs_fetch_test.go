@@ -16,6 +16,38 @@ import (
 	"time"
 )
 
+
+// An ApiJobResponse represents a Job response.
+// Example response
+// {
+//   "job_id": "dbd618f0-a878-e477-7234-2ef24cb85ef6",
+//   "jobStatus": "RUNNING",
+//   "has_error": false,
+//   "error_msg": "",
+//   "run_uid": "0f37a129-eb52-96a7-198b-44515220547e",
+//   "job_name": "Untitled",
+//   "cmd": "su  - hadoop -c 'hdfs ls ''",
+//   "parameters": [],
+//   "createDate": "1583414512",
+//   "lastUpdated": "1583415483",
+//   "stopDate": "1586092912",
+//   "extra_run_id": "scheduled__2020-03-05T09:21:40.961391+00:00"
+// }
+type ApiJobResponse struct {
+	JobId       string   `json:"job_id"`
+	JobStatus   string   `json:"jobStatus"`
+	JobName     string   `json:"job_name"`
+	RunUID      string   `json:"run_uid"`
+	ExtraRunUID string   `json:"extra_run_id"`
+	CMD         string   `json:"cmd"`
+	Parameters  []string `json:"parameters"`
+	CreateDate  string   `json:"createDate"`
+	LastUpdated string   `json:"lastUpdated"`
+	StopDate    string   `json:"stopDate"`
+	EnvVar      []string `json:"env"`
+}
+
+
 //func init() {
 //	cmdtest.StartTrace()
 //}

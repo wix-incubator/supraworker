@@ -11,12 +11,6 @@ import (
 	"time"
 )
 
-// ApiJobRequest is struct for new jobs
-type ApiJobRequest struct {
-	JobStatus string `json:"job_status"`
-	Limit     int64  `json:"limit"`
-}
-
 // An ApiJobResponse represents a Job response.
 // Example response
 // {

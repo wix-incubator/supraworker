@@ -3,20 +3,14 @@ package job
 import (
 	"context"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"github.com/weldpua2008/supraworker/config"
-	metrics "github.com/weldpua2008/supraworker/metrics"
-	model "github.com/weldpua2008/supraworker/model"
+	"github.com/weldpua2008/supraworker/metrics"
+	"github.com/weldpua2008/supraworker/model"
 	"strconv"
 	"strings"
 	"time"
 )
 
-var (
-	log = logrus.WithFields(logrus.Fields{"package": "job"})
-	// Registry for the Jobs
-	JobsRegistry = model.NewRegistry()
-)
 
 // ApiJobRequest is struct for new jobs
 type ApiJobRequest struct {
@@ -52,14 +46,6 @@ type ApiJobResponse struct {
 	LastUpdated string   `json:"lastUpdated"`
 	StopDate    string   `json:"stopDate"`
 	EnvVar      []string `json:"env"`
-}
-
-// NewApiJobRequest prepare struct for Jobs for execution request
-func NewApiJobRequest() *ApiJobRequest {
-	return &ApiJobRequest{
-		JobStatus: "PENDING",
-		Limit:     5,
-	}
 }
 
 // StartGenerateJobs goroutine for getting jobs from API with internal
@@ -196,12 +182,12 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 							metrics.FetchNewJobLatency.WithLabelValues(
 								"new_job_appended_to_registry", config.C.PrometheusNamespace, config.C.PrometheusService,
 							).Observe(float64(time.Since(start).Nanoseconds()))
-							metrics.JobsProcessed.Inc()
+							metrics.JobsFetchProcessed.Inc()
 							jobs <- job
 							j += 1
-							//log.Tracef("sent job id %v ", job.Id)
+							log.Tracef("sent job id %v ", job.Id)
 						} else {
-							//log.Trace(fmt.Sprintf("Duplicated job id %v ", job.Id))
+							log.Trace(fmt.Sprintf("Duplicated job id %v ", job.Id))
 							metrics.JobsFetchDuplicates.Inc()
 						}
 					}

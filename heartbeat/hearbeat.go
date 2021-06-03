@@ -6,6 +6,7 @@ import (
 	"github.com/weldpua2008/supraworker/communicator"
 	"github.com/weldpua2008/supraworker/config"
 	"github.com/weldpua2008/supraworker/worker"
+	"sync/atomic"
 	"time"
 )
 
@@ -52,7 +53,7 @@ func StartHeartBeat(ctx context.Context, section string, interval time.Duration)
 					// TODO: wrap it in a function –either an anonymous or a named function
 					defer cancel() // cancel when we are getting the kill signal or exit
 					config.C.NumActiveJobs = worker.NumActiveJobs
-					config.C.NumFreeSlots = config.C.NumWorkers - config.C.NumActiveJobs
+					config.C.NumFreeSlots = int(int64(config.C.NumWorkers) - atomic.LoadInt64(&config.C.NumActiveJobs))
 					for _, comm := range communicators {
 						_ = comm.Configure(param)
 						res, err := comm.Fetch(heartbeatCtx, param)

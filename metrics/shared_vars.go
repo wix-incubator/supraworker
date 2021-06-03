@@ -73,5 +73,4 @@ var (
 		Help:    "The Jobs duration in seconds.",
 		Buckets: prometheus.LinearBuckets(20, 5, 5),
 	})
-
 )

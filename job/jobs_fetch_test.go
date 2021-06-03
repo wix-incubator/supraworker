@@ -16,7 +16,6 @@ import (
 	"time"
 )
 
-
 // An ApiJobResponse represents a Job response.
 // Example response
 // {
@@ -46,7 +45,6 @@ type ApiJobResponse struct {
 	StopDate    string   `json:"stopDate"`
 	EnvVar      []string `json:"env"`
 }
-
 
 //func init() {
 //	cmdtest.StartTrace()

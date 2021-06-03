@@ -23,7 +23,7 @@ import (
 //	4). Cancelled when we fetch external API (cancellation information) [Cancel]
 
 func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
-	workerId:=fmt.Sprintf("worker-%d", id)
+	workerId := fmt.Sprintf("worker-%d", id)
 	logWorker := log.WithField("worker", workerId)
 	// On return, notify the WaitGroup that we're done.
 	defer func() {

@@ -9,6 +9,6 @@ var (
 	NumActiveJobs int64
 	// Number of processed jobs
 	NumProcessedJobs int64
-	logFields     = logrus.Fields{"package": "worker"}
-	log           = logrus.WithFields(logFields)
+	logFields        = logrus.Fields{"package": "worker"}
+	log              = logrus.WithFields(logFields)
 )

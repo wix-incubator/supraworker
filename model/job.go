@@ -270,8 +270,6 @@ func (j *Job) Failed() error {
 
 // HitTimeout returns true if job hit timeout
 func (j *Job) HitTimeout() bool {
-	j.mu.RLock()
-	defer j.mu.RUnlock()
 	if j.TTR < 1 {
 		return false
 	}
@@ -430,22 +428,40 @@ func (j *Job) doSendSteamBuf() error {
 	return nil
 }
 
+// Run job
+// return error in case we have exit code greater then 0
+func (j *Job) Run() error {
+	j.mu.Lock()
+	alreadyRunning := j.Status == JOB_STATUS_IN_PROGRESS || IsTerminalStatus(j.Status)
+	ctx, cancel := prepareContext(j.ctx, j.TTR)
+	defer cancel()
+	if !alreadyRunning {
+		j.StartAt = time.Now()
+		j.updatelastActivity()
+		// Use shell wrapper
+		shell, args := CmdWrapper(j.RunAs, j.UseSHELL, j.CMD)
+		j.cmd = execCommandContext(ctx, shell, args...)
+		j.cmd.Env = MergeEnvVars(j.CmdENV)
+	}
+	j.mu.Unlock()
+
+	if alreadyRunning {
+		return fmt.Errorf("Cannot start Job %s with status '%s' ", j.Id, j.Status)
+	}
+	err := j.runcmd(ctx)
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if err != nil && j.exitError == nil {
+		j.exitError = err
+	}
+	j.updatelastActivity()
+	return err
+}
+
 // runcmd executes command
 // returns error
 // supports cancellation
-func (j *Job) runcmd() error {
-	j.mu.Lock()
-	j.StartAt = time.Now()
-	j.updatelastActivity()
-
-	ctx, cancel := prepareContext(j.ctx, j.TTR)
-	defer cancel()
-
-	// Use shell wrapper
-	shell, args := CmdWrapper(j.RunAs, j.UseSHELL, j.CMD)
-	j.cmd = execCommandContext(ctx, shell, args...)
-	j.cmd.Env = MergeEnvVars(j.CmdENV)
-	j.mu.Unlock()
+func (j *Job) runcmd(ctx context.Context) error {
 
 	// reset backpressure counter
 	per := 5 * time.Second
@@ -597,25 +613,6 @@ func (j *Job) runcmd() error {
 	return err
 }
 
-// Run job
-// return error in case we have exit code greater then 0
-func (j *Job) Run() error {
-	j.mu.Lock()
-	alreadyRunning := j.Status == JOB_STATUS_IN_PROGRESS || IsTerminalStatus(j.Status)
-	j.mu.Unlock()
-	if alreadyRunning {
-		return fmt.Errorf("Cannot start Job %s with status '%s' ", j.Id, j.Status)
-	}
-	err := j.runcmd()
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if err != nil && j.exitError == nil {
-		j.exitError = err
-	}
-	j.updatelastActivity()
-	return err
-}
-
 // Finish is triggered when execution is successful.
 func (j *Job) Finish() error {
 	j.mu.Lock()
@@ -674,12 +671,7 @@ func (j *Job) GetContext() *context.Context {
 
 // GetLogger from job context
 func (j *Job) GetLogger() *logrus.Entry {
-	ret := log
-	if j.ctx != nil {
-		ret = utils.LoggerFromContext(j.ctx, ret)
-	}
-
-	return ret
+	return utils.LoggerFromContext(j.ctx, log)
 }
 
 // NewJob return Job with defaults

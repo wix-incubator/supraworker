@@ -88,8 +88,11 @@ func LoggerFromContext(ctx context.Context, logger *logrus.Entry) *logrus.Entry 
 	if logger == nil {
 		logger = logrus.WithFields(logrus.Fields{"package": "context"})
 	}
-	entry := logger.WithField("pid", os.Getpid())
 
+	entry := logger.WithField("pid", os.Getpid())
+	if ctx == nil {
+		return entry
+	}
 	if workerID, ok := WorkerIDFromContext(ctx); ok {
 		entry = entry.WithField("worker_id", workerID)
 	}

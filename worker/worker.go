@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/weldpua2008/supraworker/config"
-	"github.com/weldpua2008/supraworker/job"
 	"github.com/weldpua2008/supraworker/metrics"
 	"github.com/weldpua2008/supraworker/model"
 	"github.com/weldpua2008/supraworker/utils"
@@ -82,7 +81,6 @@ func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
 			logJob.Infof("Failed with %s", errJobRun)
 		}
 
-		job.JobsRegistry.Delete(j.StoreKey())
 		atomic.AddInt64(&NumActiveJobs, -1)
 		atomic.AddInt64(&NumProcessedJobs, 1)
 

@@ -21,41 +21,68 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 		return fmt.Errorf("FetchNewJobAPIURL is undefined")
 	}
 	doneNumJobs := make(chan int, 1)
+	doneNumProcessedJobs := make(chan int, 1)
 	doneNumCancelJobs := make(chan int, 1)
 	log.Infof("Starting generate jobs with delay %v", interval)
 	tickerCancelJobs := time.NewTicker(10 * time.Second)
 	tickerGenerateJobs := time.NewTicker(interval)
+	tickerCleanupJobsRegistry := time.NewTicker(interval)
 	defer func() {
 		tickerGenerateJobs.Stop()
 		tickerCancelJobs.Stop()
+		tickerCleanupJobsRegistry.Stop()
+	}()
+	go func() {
+		j := 0
+		defer func() {
+			log.Debug("Stopping registry cleanup...")
+			doneNumProcessedJobs <- j
+
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+
+				return
+
+			case <-tickerCleanupJobsRegistry.C:
+
+				// Cleanup all processed jobs
+				// we do this in this thread since new jobs can include jobs that are already on workers
+				n := JobsRegistry.Cleanup()
+				j += n
+				//if n > 0 {
+				log.Tracef("Cleared registry %d/%d jobs", n, n+JobsRegistry.Len())
+				//JobsRegistry.Map(func(key string, job *model.Job) {
+				//	log.Tracef("Left Job %s => %p in %s cmd: %s", job.StoreKey(), job, job.Status, job.CMD)
+				//})
+				//}
+			}
+		}
+
 	}()
 
 	go func() {
 		j := 0
+		defer func() {
+			log.Debug("Stopping generation of jobs")
+			close(jobs)
+			if GracefulShutdown(jobs) {
+				log.Debug("Jobs generation finished [ SUCCESSFULLY ]")
+			} else {
+				log.Warn("Jobs generation finished [ FAILED ]")
+			}
+
+			log.Debugf("Sent %d processed jobs...", j)
+			doneNumJobs <- j
+
+		}()
 		for {
 			select {
 			case <-ctx.Done():
-				log.Debug("Stopping generation of jobs")
-				close(jobs)
-				doneNumJobs <- j
-				if GracefulShutdown(jobs) {
-					log.Debug("Jobs generation finished [ SUCCESSFULLY ]")
-				} else {
-					log.Warn("Jobs generation finished [ FAILED ]")
-				}
-
 				return
 			case <-tickerGenerateJobs.C:
 				start := time.Now()
-				// Cleanup all processed jobs
-				// we do this in this thread since new jobs can include jobs that are already on workers
-				if n := JobsRegistry.Cleanup(); n > 0 {
-					j += n
-					log.Tracef("Cleared %d/%d, already processed %d jobs", n, n+JobsRegistry.Len(), j)
-					//JobsRegistry.Map(func(key string, job *model.Job) {
-					//	log.Tracef("Left Job %s => %p in %s cmd: %s", job.StoreKey(), job, job.Status, job.CMD)
-					//})
-				}
 				// TODO: customize timeout
 				if err, jobsData := model.NewRemoteApiRequest(context.WithValue(ctx, model.CtxKeyRequestTimeout, maxRequestTimeout), "jobs.get.params", model.FetchNewJobAPIMethod, model.FetchNewJobAPIURL); err == nil {
 					metrics.FetchNewJobLatency.WithLabelValues(
@@ -241,6 +268,11 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 
 	numSentJobs := <-doneNumJobs
 	numCancelJobs := <-doneNumCancelJobs
+	numClearedJobs := <-doneNumProcessedJobs
+	if numClearedJobs > 0 {
+		log.Infof("Cleared %v jobs", numSentJobs)
+
+	}
 
 	log.Infof("Sent %v jobs", numSentJobs)
 	if numCancelJobs > 0 {

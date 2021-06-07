@@ -9,6 +9,7 @@ import (
 	"github.com/weldpua2008/supraworker/model"
 	"github.com/weldpua2008/supraworker/utils"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -22,34 +23,31 @@ import (
 //	4). Cancelled when we fetch external API (cancellation information) [Cancel]
 
 func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
-
-	logWorker := log.WithField("worker", id)
+	workerId := fmt.Sprintf("worker-%d", id)
+	logWorker := log.WithField("worker", workerId)
 	// On return, notify the WaitGroup that we're done.
 	defer func() {
 		logWorker.Debugf("[FINISHED]")
 		metrics.WorkerStatistics.WithLabelValues(
-			"finished", fmt.Sprintf("worker-%d", id), config.C.PrometheusNamespace, config.C.PrometheusService,
+			"finished", workerId, config.C.PrometheusNamespace, config.C.PrometheusService,
 		).Inc()
 		wg.Done()
 	}()
 
 	logWorker.Info("Starting")
 	metrics.WorkerStatistics.WithLabelValues(
-		"live", fmt.Sprintf("worker-%d", id), config.C.PrometheusNamespace, config.C.PrometheusService,
+		"live", workerId, config.C.PrometheusNamespace, config.C.PrometheusService,
 	).Inc()
 	for j := range jobs {
-
-		ctx := j.GetContext()
-		j.SetContext(utils.FromWorkerID(*ctx, fmt.Sprintf("worker-%d", id)))
+		j.AddToContext(utils.CtxWorkerIdKey, workerId)
 		logJob := j.GetLogger()
 
 		logJob.Tracef("New Job with TTR %v", time.Duration(j.TTR)*time.Millisecond)
 		metrics.WorkerStatistics.WithLabelValues(
-			"newjob", fmt.Sprintf("worker-%v", id), config.C.PrometheusNamespace, config.C.PrometheusService,
+			"new_job", workerId, config.C.PrometheusNamespace, config.C.PrometheusService,
 		).Inc()
-		mu.Lock()
-		NumActiveJobs += 1
-		mu.Unlock()
+		atomic.AddInt64(&NumActiveJobs, 1)
+
 		errJobRun := j.Run()
 		if errFlushBuf := j.FlushSteamsBuffer(); errFlushBuf != nil {
 			logJob.Tracef("failed to flush logstream buffer due %v", errFlushBuf)
@@ -62,30 +60,36 @@ func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
 			if errTimeout := j.Timeout(); errTimeout != nil {
 				logJob.Tracef("[Timeout()] got: %v ", errTimeout)
 			}
+			metrics.JobsTimeout.Inc()
 		case errors.Is(errJobRun, model.ErrJobCancelled):
 			if errTimeout := j.Cancel(); errTimeout != nil {
 				logJob.Tracef("[Cancel()] got: %v ", errTimeout)
 			}
+			metrics.JobsTimeout.Inc()
 		case errJobRun == nil:
 			if err := j.Finish(); err != nil {
 				logJob.Debugf("finished in %v got %v", dur, err)
 			} else {
 				logJob.Debugf("finished in %v", dur)
 			}
-			jobsSucceeded.Inc()
-			jobsDuration.Observe(dur.Seconds())
+			metrics.JobsSucceeded.Inc()
+			metrics.JobsDuration.Observe(dur.Seconds())
 		default:
 			if errFail := j.Failed(); errFail != nil {
 				logJob.Tracef("[Failed()] got: %v ", errFail)
 			}
-			jobsFailed.Inc()
+			metrics.JobsFailed.Inc()
 			logJob.Infof("Failed with %s", errJobRun)
 		}
-		mu.Lock()
-		NumActiveJobs -= 1
-		mu.Unlock()
 
-		jobsProcessed.Inc()
 		job.JobsRegistry.Delete(j.StoreKey())
+		atomic.AddInt64(&NumActiveJobs, -1)
+		atomic.AddInt64(&NumProcessedJobs, 1)
+
+		metrics.JobsProcessed.Inc()
+		metrics.WorkerStatistics.WithLabelValues(
+			"processed_job", workerId, config.C.PrometheusNamespace, config.C.PrometheusService,
+		).Inc()
+
 	}
 }

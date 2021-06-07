@@ -3,64 +3,13 @@ package job
 import (
 	"context"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"github.com/weldpua2008/supraworker/config"
-	metrics "github.com/weldpua2008/supraworker/metrics"
-	model "github.com/weldpua2008/supraworker/model"
+	"github.com/weldpua2008/supraworker/metrics"
+	"github.com/weldpua2008/supraworker/model"
 	"strconv"
 	"strings"
 	"time"
 )
-
-var (
-	log = logrus.WithFields(logrus.Fields{"package": "job"})
-	// Registry for the Jobs
-	JobsRegistry = model.NewRegistry()
-)
-
-// ApiJobRequest is struct for new jobs
-type ApiJobRequest struct {
-	JobStatus string `json:"job_status"`
-	Limit     int64  `json:"limit"`
-}
-
-// An ApiJobResponse represents a Job response.
-// Example response
-// {
-//   "job_id": "dbd618f0-a878-e477-7234-2ef24cb85ef6",
-//   "jobStatus": "RUNNING",
-//   "has_error": false,
-//   "error_msg": "",
-//   "run_uid": "0f37a129-eb52-96a7-198b-44515220547e",
-//   "job_name": "Untitled",
-//   "cmd": "su  - hadoop -c 'hdfs ls ''",
-//   "parameters": [],
-//   "createDate": "1583414512",
-//   "lastUpdated": "1583415483",
-//   "stopDate": "1586092912",
-//   "extra_run_id": "scheduled__2020-03-05T09:21:40.961391+00:00"
-// }
-type ApiJobResponse struct {
-	JobId       string   `json:"job_id"`
-	JobStatus   string   `json:"jobStatus"`
-	JobName     string   `json:"job_name"`
-	RunUID      string   `json:"run_uid"`
-	ExtraRunUID string   `json:"extra_run_id"`
-	CMD         string   `json:"cmd"`
-	Parameters  []string `json:"parameters"`
-	CreateDate  string   `json:"createDate"`
-	LastUpdated string   `json:"lastUpdated"`
-	StopDate    string   `json:"stopDate"`
-	EnvVar      []string `json:"env"`
-}
-
-// NewApiJobRequest prepare struct for Jobs for execution request
-func NewApiJobRequest() *ApiJobRequest {
-	return &ApiJobRequest{
-		JobStatus: "PENDING",
-		Limit:     5,
-	}
-}
 
 // StartGenerateJobs goroutine for getting jobs from API with internal
 // it expects `model.FetchNewJobAPIURL`
@@ -72,40 +21,68 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 		return fmt.Errorf("FetchNewJobAPIURL is undefined")
 	}
 	doneNumJobs := make(chan int, 1)
+	doneNumProcessedJobs := make(chan int, 1)
 	doneNumCancelJobs := make(chan int, 1)
 	log.Infof("Starting generate jobs with delay %v", interval)
 	tickerCancelJobs := time.NewTicker(10 * time.Second)
 	tickerGenerateJobs := time.NewTicker(interval)
+	tickerCleanupJobsRegistry := time.NewTicker(interval)
 	defer func() {
 		tickerGenerateJobs.Stop()
 		tickerCancelJobs.Stop()
+		tickerCleanupJobsRegistry.Stop()
+	}()
+	go func() {
+		j := 0
+		defer func() {
+			log.Debug("Stopping registry cleanup...")
+			doneNumProcessedJobs <- j
+
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+
+				return
+
+			case <-tickerCleanupJobsRegistry.C:
+
+				// Cleanup all processed jobs
+				// we do this in this thread since new jobs can include jobs that are already on workers
+				n := JobsRegistry.Cleanup()
+				j += n
+				//if n > 0 {
+				log.Tracef("Cleared registry %d/%d jobs", n, n+JobsRegistry.Len())
+				//JobsRegistry.Map(func(key string, job *model.Job) {
+				//	log.Tracef("Left Job %s => %p in %s cmd: %s", job.StoreKey(), job, job.Status, job.CMD)
+				//})
+				//}
+			}
+		}
+
 	}()
 
 	go func() {
 		j := 0
+		defer func() {
+			log.Debug("Stopping generation of jobs")
+			close(jobs)
+			if GracefulShutdown(jobs) {
+				log.Debug("Jobs generation finished [ SUCCESSFULLY ]")
+			} else {
+				log.Warn("Jobs generation finished [ FAILED ]")
+			}
+
+			log.Debugf("Sent %d processed jobs...", j)
+			doneNumJobs <- j
+
+		}()
 		for {
 			select {
 			case <-ctx.Done():
-				close(jobs)
-				doneNumJobs <- j
-				if GracefulShutdown(jobs) {
-					log.Debug("Jobs generation finished [ SUCCESSFULLY ]")
-				} else {
-					log.Warn("Jobs generation finished [ FAILED ]")
-				}
-
 				return
 			case <-tickerGenerateJobs.C:
 				start := time.Now()
-				// Cleanup all processed jobs
-				// we do this in this thread since new jobs can include jobs that are already on workers
-				if n := JobsRegistry.Cleanup(); n > 0 {
-					j += n
-					log.Tracef("Cleared %d/%d, already processed %d jobs", n, n+JobsRegistry.Len(), j)
-					//JobsRegistry.Map(func(key string, job *model.Job) {
-					//	log.Tracef("Left Job %s => %p in %s cmd: %s", job.StoreKey(), job, job.Status, job.CMD)
-					//})
-				}
 				// TODO: customize timeout
 				if err, jobsData := model.NewRemoteApiRequest(context.WithValue(ctx, model.CtxKeyRequestTimeout, maxRequestTimeout), "jobs.get.params", model.FetchNewJobAPIMethod, model.FetchNewJobAPIURL); err == nil {
 					metrics.FetchNewJobLatency.WithLabelValues(
@@ -196,12 +173,12 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 							metrics.FetchNewJobLatency.WithLabelValues(
 								"new_job_appended_to_registry", config.C.PrometheusNamespace, config.C.PrometheusService,
 							).Observe(float64(time.Since(start).Nanoseconds()))
-							metrics.JobsProcessed.Inc()
+							metrics.JobsFetchProcessed.Inc()
 							jobs <- job
 							j += 1
-							//log.Tracef("sent job id %v ", job.Id)
+							log.Tracef("sent job id %v ", job.Id)
 						} else {
-							//log.Trace(fmt.Sprintf("Duplicated job id %v ", job.Id))
+							log.Trace(fmt.Sprintf("Duplicated job id %v ", job.Id))
 							metrics.JobsFetchDuplicates.Inc()
 						}
 					}
@@ -291,6 +268,11 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 
 	numSentJobs := <-doneNumJobs
 	numCancelJobs := <-doneNumCancelJobs
+	numClearedJobs := <-doneNumProcessedJobs
+	if numClearedJobs > 0 {
+		log.Infof("Cleared %v jobs", numSentJobs)
+
+	}
 
 	log.Infof("Sent %v jobs", numSentJobs)
 	if numCancelJobs > 0 {

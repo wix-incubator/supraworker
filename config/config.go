@@ -29,7 +29,7 @@ const (
 type Config struct {
 	// Identification for the process
 	ClientId            string `mapstructure:"clientId"`
-	NumActiveJobs       int    // Number of jobs
+	NumActiveJobs       int64  // Number of jobs
 	NumFreeSlots        int    // Number of free jobs slots
 	NumWorkers          int    `mapstructure:"workers"`
 	PrometheusNamespace string

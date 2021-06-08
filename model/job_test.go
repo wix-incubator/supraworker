@@ -305,7 +305,7 @@ func TestJobCancel(t *testing.T) {
 	}
 }
 
-func TestJobUpdateActivity(t *testing.T) {
+func TestJob_UpdateActivity(t *testing.T) {
 	job := NewTestJob("echo", "echo")
 	got := job.LastActivityAt
 	job.updatelastActivity()
@@ -313,6 +313,65 @@ func TestJobUpdateActivity(t *testing.T) {
 
 	if got == want {
 		t.Errorf("got '%s' == want '%s'\n", got, want)
+	}
+}
+
+func TestJob_IsTerminal(t *testing.T) {
+	job := NewTestJob("echo", "echo")
+
+	if job.IsTerminal() {
+		t.Errorf("Job '%v'\n shouldn't be ib terminal state\n", job)
+	}
+	for i := 0; i < 10; i++ {
+		job.PutInTerminal()
+		if !job.IsTerminal() {
+			t.Errorf("Job '%v'\n should be ib terminal state\n", job)
+		}
+	}
+
+}
+func TestJob_IsStuck(t *testing.T) {
+
+	cases := []struct {
+		CMDExecutionStoppedAt time.Time
+		StoppedAt             time.Time
+		IsStuck               bool
+		IsTerminal            bool
+	}{
+		{
+			CMDExecutionStoppedAt: time.Now(),
+			StoppedAt:             time.Now(),
+		},
+		{
+			CMDExecutionStoppedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
+			StoppedAt:             time.Now(),
+			IsStuck:               true,
+		},
+		{
+			CMDExecutionStoppedAt: time.Now(),
+			StoppedAt:             time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
+			IsStuck:               false,
+			IsTerminal:            false,
+		},
+
+		{
+			CMDExecutionStoppedAt: time.Now(),
+			StoppedAt:             time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
+			IsStuck:               true,
+			IsTerminal:            true,
+		},
+	}
+	for _, tc := range cases {
+		job := NewTestJob("echo", "echo")
+		if tc.IsTerminal {
+			job.PutInTerminal()
+		}
+		job.CMDExecutionStoppedAt = tc.CMDExecutionStoppedAt
+		job.StoppedAt = tc.StoppedAt
+
+		if job.IsStuck() != tc.IsStuck {
+			t.Errorf("got '%v' == want '%v' IsTerminal %v, \ntc %v\n job: %v\n", job.IsStuck(), tc.IsStuck, job.IsTerminal(), tc, job)
+		}
 	}
 }
 

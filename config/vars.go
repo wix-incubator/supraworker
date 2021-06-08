@@ -1,5 +1,10 @@
 package config
 
+import "time"
+
+const TimeoutJobsAfter5MinInTerminalState = 5 * time.Minute
+const StopReadJobsOutputAfter5Min = 5 * time.Minute
+
 var (
 	// Set of constants for fetching Job's REST API
 	CFG_PREFIX_JOBS                 = "jobs"

@@ -12,8 +12,10 @@ import (
 	"io"
 	"io/ioutil"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -24,7 +26,7 @@ import (
 // - Successful
 func IsTerminalStatus(status string) bool {
 	switch status {
-	case JOB_STATUS_ERROR, JOB_STATUS_CANCELED, JOB_STATUS_SUCCESS:
+	case JOB_STATUS_ERROR, JOB_STATUS_CANCELED, JOB_STATUS_SUCCESS, JOB_STATUS_TIMEOUT:
 		return true
 	}
 	return false
@@ -45,6 +47,8 @@ type Job struct {
 	CreateAt               time.Time     // When Job was created
 	StartAt                time.Time     // When command started
 	LastActivityAt         time.Time     // When job metadata last changed
+	StoppedAt              time.Time     // When job stopped
+	CMDExecutionStoppedAt  time.Time     // When execution stopped
 	PreviousStatus         string        // Previous Status
 	Status                 string        // Currently status
 	MaxAttempts            int           // Absolute max num of attempts.
@@ -62,6 +66,10 @@ type Job struct {
 	ctx                    context.Context
 	alreadyStopped         bool
 	killOnce               sync.Once
+	startOnce              sync.Once
+	stopOnce               sync.Once
+	inTerminalState        int32
+	stopChan               chan struct{}
 
 	// params got from your API
 	RawParams []map[string]interface{}
@@ -76,6 +84,22 @@ type Job struct {
 	// If we should use shell and wrap the command
 	UseSHELL   bool
 	streamsBuf []string
+}
+
+// PutInTerminal marks job as in terminal status
+func (j *Job) PutInTerminal() {
+	atomic.StoreInt32(&(j.inTerminalState), int32(1))
+	j.stopOnce.Do(func() {
+		j.StoppedAt = time.Now()
+	})
+}
+
+// IsTerminal returns true in case job entered final state
+func (j *Job) IsTerminal() bool {
+	if atomic.LoadInt32(&(j.inTerminalState)) != 0 {
+		return true
+	}
+	return false
 }
 
 // StoreKey returns StoreKey
@@ -97,6 +121,9 @@ func (j *Job) updatelastActivity() {
 
 // updateStatus job status
 func (j *Job) updateStatus(status string) error {
+	if IsTerminalStatus(status) {
+		j.PutInTerminal()
+	}
 	j.GetLogger().Tracef("'%s' -> '%s'", j.Status, status)
 	j.PreviousStatus = j.Status
 	j.Status = status
@@ -195,7 +222,9 @@ func (j *Job) stopProcess() (cancelError error) {
 			} else {
 				j.GetLogger().Warnf("Can't fetch process tree, got %v", errTree)
 			}
+
 			if err := j.cmd.Process.Kill(); err != nil {
+				runtime.Gosched()
 				status := j.cmd.ProcessState.Sys()
 				ws, ok := status.(syscall.WaitStatus)
 				if ok {
@@ -210,12 +239,12 @@ func (j *Job) stopProcess() (cancelError error) {
 
 			}
 			if processList, err := ps.Processes(); err == nil {
+				runtime.Gosched()
 				for aux := range processList {
 					process := processList[aux]
 					if ContainsIntInIntSlice(processChildren, process.Pid()) {
 						errKill := syscall.Kill(process.Pid(), syscall.SIGTERM)
 						j.GetLogger().Tracef("Killing PID: %d --> Name: %s --> ParentPID: %d [%v]", process.Pid(), process.Executable(), process.PPid(), errKill)
-
 					}
 				}
 			}
@@ -268,13 +297,39 @@ func (j *Job) Failed() error {
 	//return j.stopProcess()
 }
 
+func (j *Job) GetTTR() uint64 {
+	return atomic.LoadUint64(&j.TTR)
+}
+func (j *Job) GetTTRDuration() time.Duration {
+	return time.Duration(atomic.LoadUint64(&j.TTR)) * time.Millisecond
+}
+
+// IsStuck returns true if job in terminal state for more then TimeoutJobsAfter5MinInTerminalState
+func (j *Job) IsStuck() bool {
+	now := time.Now()
+	if j.IsTerminal() && !j.StoppedAt.IsZero() {
+		end := j.StoppedAt.Add(config.TimeoutJobsAfter5MinInTerminalState)
+		if now.After(end) {
+			return true
+		}
+	}
+	if !j.CMDExecutionStoppedAt.IsZero() {
+		end := j.CMDExecutionStoppedAt.Add(config.TimeoutJobsAfter5MinInTerminalState)
+		if now.After(end) {
+			return true
+		}
+	}
+	return false
+}
+
 // HitTimeout returns true if job hit timeout
+// always false if TTR is 0
 func (j *Job) HitTimeout() bool {
-	if j.TTR < 1 {
+	if j.GetTTR() < 1 {
 		return false
 	}
 	now := time.Now()
-	end := j.StartAt.Add(time.Duration(j.TTR) * time.Millisecond)
+	end := j.StartAt.Add(j.GetTTRDuration())
 	return now.After(end)
 }
 
@@ -293,6 +348,21 @@ func (j *Job) Timeout() error {
 		j.GetLogger().Tracef("[TIMEOUT] is already in terminal state %s", j.Status)
 	}
 	return j.stopProcess()
+}
+
+func (j *Job) TimeoutWithCancel(duration time.Duration) error {
+	errorChan := make(chan error)
+	go func() {
+		err := j.Timeout()
+		errorChan <- err
+	}()
+	var err error
+	select {
+	case <-time.After(duration):
+		err = fmt.Errorf("%w failed to timeout in %v", ErrJobTimeout, duration)
+	case err = <-errorChan:
+	}
+	return err
 }
 
 // Appends log stream to the buffer.
@@ -343,6 +413,7 @@ func (j *Job) resetCounterLoop(ctx context.Context, after time.Duration) {
 		tickerSlowLogsInterval.Stop()
 	}()
 	for {
+		runtime.Gosched()
 		select {
 		case <-ctx.Done():
 			_ = j.doSendSteamBuf()
@@ -387,7 +458,7 @@ func (j *Job) FlushSteamsBuffer() error {
 func (j *Job) doSendSteamBuf() error {
 	j.streamsMu.Lock()
 	defer j.streamsMu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), config.StopReadJobsOutputAfter5Min)
 	defer cancel()
 	if j.streamsBuf != nil && len(j.streamsBuf) > 0 {
 		// j.GetLogger().Tracef("doSendSteamBuf for '%v' len '%v' %v\n ", j.Id, len(j.streamsBuf),j.streamsBuf)
@@ -411,7 +482,7 @@ func (j *Job) doSendSteamBuf() error {
 
 			select {
 			case <-doneChan:
-			case <-time.After(6 * time.Minute):
+			case <-time.After(config.StopReadJobsOutputAfter5Min + 1*time.Minute):
 				j.GetLogger().Tracef("Timeout before updated api stage %s", stage)
 			}
 
@@ -436,13 +507,18 @@ func (j *Job) Run() error {
 	ctx, cancel := prepareContext(j.ctx, j.TTR)
 	defer cancel()
 	if !alreadyRunning {
-		j.StartAt = time.Now()
-		j.updatelastActivity()
-		// Use shell wrapper
-		shell, args := CmdWrapper(j.RunAs, j.UseSHELL, j.CMD)
-		j.cmd = execCommandContext(ctx, shell, args...)
-		j.cmd.Env = MergeEnvVars(j.CmdENV)
+		j.startOnce.Do(func() {
+			j.StartAt = time.Now()
+			j.updatelastActivity()
+			// Use shell wrapper
+			shell, args := CmdWrapper(j.RunAs, j.UseSHELL, j.CMD)
+			j.cmd = execCommandContext(ctx, shell, args...)
+			j.cmd.Env = MergeEnvVars(j.CmdENV)
+
+		},
+		)
 	}
+
 	j.mu.Unlock()
 
 	if alreadyRunning {
@@ -493,9 +569,9 @@ func (j *Job) runcmd(ctx context.Context) error {
 	}
 
 	if err != nil && j.cmd.Process != nil {
-		j.GetLogger().Tracef("Start CMD: %s [%d] TTR %v\n", j.cmd, j.cmd.Process.Pid, time.Duration(j.TTR)*time.Millisecond)
+		j.GetLogger().Tracef("Start CMD: %s [%d] TTR %v\n", j.cmd, j.cmd.Process.Pid, j.GetTTRDuration())
 	} else {
-		j.GetLogger().Tracef("Start CMD: %s TTR %v\n", j.cmd, time.Duration(j.TTR)*time.Millisecond)
+		j.GetLogger().Tracef("Start CMD: %s TTR %v\n", j.cmd, j.GetTTRDuration())
 	}
 	// update API
 	j.doApiCall("run")
@@ -534,15 +610,17 @@ func (j *Job) runcmd(ctx context.Context) error {
 
 			msg := scanner.Text()
 			_ = j.AppendLogStream([]string{msg, "\n"})
+			runtime.Gosched()
 		}
 
 		if scanner.Err() != nil {
 			b, err := ioutil.ReadAll(*data)
 			if err == nil {
 				_ = j.AppendLogStream([]string{string(b), "\n"})
-			} else {
-				j.GetLogger().Tracef("[Job  %v] Scanner got unexpected failure: %v", j.Id, err)
 			}
+			//else {
+			//	j.GetLogger().Tracef("[Job %v] Scanner got unexpected failure: %v", j.Id, err)
+			//}
 		}
 	}
 
@@ -552,17 +630,25 @@ func (j *Job) runcmd(ctx context.Context) error {
 	// send stderr to streaming API
 	go copyStd(&stderr, notifyStderrSent)
 
-	<-notifyStdoutSent
-	<-notifyStderrSent
+	err = j.cmd.Wait()
+	select {
+	case <-notifyStdoutSent:
+	case <-time.After(config.StopReadJobsOutputAfter5Min):
+	}
+
+	select {
+	case <-notifyStderrSent:
+	case <-time.After(config.StopReadJobsOutputAfter5Min):
+	}
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	// The returned error is nil if the command runs, has
 	// no problems copying stdin, stdout, and stderr,
 	// and exits with a zero exit status.
 
-	err = j.cmd.Wait()
+	j.CMDExecutionStoppedAt = time.Now()
 	// signal that we've read all logs
-
+	j.GetLogger().Tracef("Brodcast stop logs")
 	j.notifyStopStreams <- struct{}{}
 	//j.mu.Unlock()
 	//
@@ -652,16 +738,15 @@ func (j *Job) SetContext(ctx context.Context) {
 func (j *Job) AddToContext(key interface{}, value interface{}) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	if j.ctx == nil {
-		j.ctx = context.Background()
+	if j.ctx != nil {
+		j.ctx = context.WithValue(j.ctx, key, value)
 	}
-	context.WithValue(j.ctx, key, value)
 }
 
 // GetContext of the job
 func (j *Job) GetContext() *context.Context {
-	j.mu.RLock()
-	defer j.mu.RUnlock()
+	//j.mu.RLock()
+	//defer j.mu.RUnlock()
 	if j.ctx == nil {
 		ctx := context.Background()
 		return &ctx
@@ -698,6 +783,7 @@ func NewJob(id string, cmd string) *Job {
 		RunAs:             "",
 		ctx:               utils.FromJobID(context.Background(), id),
 		StreamInterval:    time.Duration(5) * time.Second,
+		stopChan:          make(chan struct{}, 1),
 	}
 }
 

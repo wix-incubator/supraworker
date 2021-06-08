@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"github.com/weldpua2008/supraworker/utils"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -55,6 +56,7 @@ func (r *Registry) Len() int {
 // Delete a job by job ID.
 // Return false if record does not exist.
 func (r *Registry) Delete(id string) bool {
+	log.Infof("Try remove job %s from registry", id)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	_, ok := r.all[id]
@@ -71,11 +73,17 @@ func (r *Registry) Delete(id string) bool {
 // TODO: Consider new timeout status & flow
 //  - Add batch
 func (r *Registry) Cleanup() (num int) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if len(r.all) > 0 {
-		log.Infof("Checking Registry %d", len(r.all))
+
+	if r.Len() > 0 {
+		r.mu.Lock()
+		copyMap := make(map[string]*Job)
 		for k, v := range r.all {
+			copyMap[k] = v
+		}
+		r.mu.Unlock()
+
+		log.Infof("Checking Registry %d", len(r.all))
+		for k, v := range copyMap {
 			switch {
 			case v.HitTimeout():
 				if err := v.Timeout(); err != nil {
@@ -85,14 +93,15 @@ func (r *Registry) Cleanup() (num int) {
 				}
 			case len(v.Id) < 1:
 				log.Tracef("[EMPTY Job] %v", v)
-			case IsTerminalStatus(v.GetStatus()):
-				utils.LoggerFromContext(*v.GetContext(), log).Debug("[CLEANUP]")
+			case v.IsStuck():
+				utils.LoggerFromContext(*v.GetContext(), log).Debug("[STUCK JOB] Cleanup")
 			default:
 				continue
-
 			}
-			delete(r.all, k)
-			num += 1
+			if r.Delete(k) {
+				num += 1
+			}
+			runtime.Gosched()
 		}
 	}
 	return num

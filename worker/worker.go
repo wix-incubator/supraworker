@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/weldpua2008/supraworker/config"
+	"github.com/weldpua2008/supraworker/job"
 	"github.com/weldpua2008/supraworker/metrics"
 	"github.com/weldpua2008/supraworker/model"
 	"github.com/weldpua2008/supraworker/utils"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,15 +50,16 @@ func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
 		atomic.AddInt64(&NumActiveJobs, 1)
 
 		errJobRun := j.Run()
-		if errFlushBuf := j.FlushSteamsBuffer(); errFlushBuf != nil {
-			logJob.Tracef("failed to flush logstream buffer due %v", errFlushBuf)
-		}
+		logJob.Tracef("Run() Finished")
+		//if errFlushBuf := j.FlushSteamsBuffer(); errFlushBuf != nil {
+		//	logJob.Tracef("failed to flush logstream buffer due %v", errFlushBuf)
+		//}
 
 		dur := time.Since(j.StartAt)
 		switch {
 		// Execution stopped by TTR
 		case errors.Is(errJobRun, model.ErrJobTimeout):
-			if errTimeout := j.Timeout(); errTimeout != nil {
+			if errTimeout := j.TimeoutWithCancel(config.TimeoutJobsAfter5MinInTerminalState); errTimeout != nil {
 				logJob.Tracef("[Timeout()] got: %v ", errTimeout)
 			}
 			metrics.JobsTimeout.Inc()
@@ -81,6 +84,7 @@ func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
 			logJob.Infof("Failed with %s", errJobRun)
 		}
 
+		job.JobsRegistry.Delete(j.StoreKey())
 		atomic.AddInt64(&NumActiveJobs, -1)
 		atomic.AddInt64(&NumProcessedJobs, 1)
 
@@ -88,6 +92,7 @@ func StartWorker(id int, jobs <-chan *model.Job, wg *sync.WaitGroup) {
 		metrics.WorkerStatistics.WithLabelValues(
 			"processed_job", workerId, config.C.PrometheusNamespace, config.C.PrometheusService,
 		).Inc()
+		runtime.Gosched()
 
 	}
 }

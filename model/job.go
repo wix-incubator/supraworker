@@ -506,6 +506,8 @@ func (j *Job) Run() error {
 	alreadyRunning := j.Status == JOB_STATUS_IN_PROGRESS || IsTerminalStatus(j.Status)
 	ctx, cancel := prepareContext(j.ctx, j.TTR)
 	defer cancel()
+	j.mu.Unlock()
+
 	if !alreadyRunning {
 		j.startOnce.Do(func() {
 			j.StartAt = time.Now()
@@ -517,11 +519,7 @@ func (j *Job) Run() error {
 
 		},
 		)
-	}
-
-	j.mu.Unlock()
-
-	if alreadyRunning {
+	} else {
 		return fmt.Errorf("Cannot start Job %s with status '%s' ", j.Id, j.Status)
 	}
 	err := j.runcmd(ctx)

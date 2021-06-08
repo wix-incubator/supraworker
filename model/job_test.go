@@ -527,6 +527,7 @@ func TestJobTimeoutAndCancel(t *testing.T) {
 		}()
 
 		go func() {
+			time.Sleep(10 * time.Millisecond)
 			// waiting for a status
 			for job.GetStatus() == JOB_STATUS_PENDING {
 				time.Sleep(10 * time.Millisecond)

@@ -624,10 +624,11 @@ func (j *Job) runcmd(ctx context.Context) error {
 
 	// send stdout to streaming API
 	go copyStd(&stdout, notifyStdoutSent)
+	runtime.Gosched()
 
 	// send stderr to streaming API
 	go copyStd(&stderr, notifyStderrSent)
-
+	runtime.Gosched()
 	err = j.cmd.Wait()
 	select {
 	case <-notifyStdoutSent:

@@ -87,7 +87,7 @@ func TestRegistryCleanup(t *testing.T) {
 		job.TTR = 10000
 		// no cancellation flow on cleanup
 		// right now it won't execute something
-		job.Status = JOB_STATUS_CANCELED
+		job.Status = JOB_STATUS_RUN_OK
 
 		if !r.Add(job) {
 			t.Fatalf("Expect to add job %s", job.StoreKey())

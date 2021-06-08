@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"github.com/weldpua2008/supraworker/utils"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -38,8 +39,8 @@ func (r *Registry) Add(rec *Job) bool {
 
 // Map function
 func (r *Registry) Map(f func(string, *Job)) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for k, v := range r.all {
 		f(k, v)
 	}
@@ -48,14 +49,14 @@ func (r *Registry) Map(f func(string, *Job)) {
 // Len returns length of registry.
 func (r *Registry) Len() int {
 	r.mu.RLock()
-	c := len(r.all)
-	r.mu.RUnlock()
-	return c
+	defer r.mu.RUnlock()
+	return len(r.all)
 }
 
 // Delete a job by job ID.
 // Return false if record does not exist.
 func (r *Registry) Delete(id string) bool {
+	log.Infof("Try remove job %s from registry", id)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	_, ok := r.all[id]
@@ -72,22 +73,36 @@ func (r *Registry) Delete(id string) bool {
 // TODO: Consider new timeout status & flow
 //  - Add batch
 func (r *Registry) Cleanup() (num int) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for k, v := range r.all {
-		if v.HitTimeout() {
-			if err := v.Timeout(); err != nil {
-				utils.LoggerFromContext(*v.GetContext(), log).Debugf("[TIMEOUT] failed %v, Job started at %v, got %v", err, v.StartAt, err)
-			} else {
-				utils.LoggerFromContext(*v.GetContext(), log).Tracef("[TIMEOUT] successfully, Job started at %v, TTR %v", v.StartAt, time.Duration(v.TTR)*time.Millisecond)
-			}
 
-			delete(r.all, k)
-			num += 1
-		} else if len(v.Id) < 1 {
-			log.Tracef("[EMPTY Job] %v", v)
+	if r.Len() > 0 {
+		r.mu.Lock()
+		copyMap := make(map[string]*Job)
+		for k, v := range r.all {
+			copyMap[k] = v
 		}
+		r.mu.Unlock()
 
+		log.Infof("Checking Registry %d", len(r.all))
+		for k, v := range copyMap {
+			switch {
+			case v.HitTimeout():
+				if err := v.Timeout(); err != nil {
+					utils.LoggerFromContext(*v.GetContext(), log).Debugf("[TIMEOUT] failed %v, Job started at %v, got %v", err, v.StartAt, err)
+				} else {
+					utils.LoggerFromContext(*v.GetContext(), log).Tracef("[TIMEOUT] successfully, Job started at %v, TTR %v", v.StartAt, time.Duration(v.TTR)*time.Millisecond)
+				}
+			case len(v.Id) < 1:
+				log.Tracef("[EMPTY Job] %v", v)
+			case v.IsStuck():
+				utils.LoggerFromContext(*v.GetContext(), log).Debug("[STUCK JOB] Cleanup")
+			default:
+				continue
+			}
+			if r.Delete(k) {
+				num += 1
+			}
+			runtime.Gosched()
+		}
 	}
 	return num
 }

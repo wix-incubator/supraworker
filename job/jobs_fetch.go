@@ -51,12 +51,12 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 				// we do this in this thread since new jobs can include jobs that are already on workers
 				n := JobsRegistry.Cleanup()
 				j += n
-				//if n > 0 {
-				log.Tracef("Cleared registry %d/%d jobs", n, n+JobsRegistry.Len())
-				//JobsRegistry.Map(func(key string, job *model.Job) {
-				//	log.Tracef("Left Job %s => %p in %s cmd: %s", job.StoreKey(), job, job.Status, job.CMD)
-				//})
-				//}
+				if n > 0 {
+					log.Tracef("Cleared registry %d/%d jobs", n, n+JobsRegistry.Len())
+					//JobsRegistry.Map(func(key string, job *model.Job) {
+					//	log.Tracef("Left Job %s => %p in %s cmd: %s", job.StoreKey(), job, job.Status, job.CMD)
+					//})
+				}
 			}
 		}
 
@@ -259,9 +259,7 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 				metrics.FetchCancelLatency.WithLabelValues(
 					"total", config.C.PrometheusNamespace, config.C.PrometheusService,
 				).Observe(float64(time.Since(start).Nanoseconds()))
-
 			}
-
 		}
 
 	}()

@@ -671,14 +671,14 @@ func (j *Job) runcmd(ctx context.Context) error {
 		err = ErrJobCancelled
 	case j.Status == JOB_STATUS_TIMEOUT:
 		err = ErrJobTimeout
-	case ctx != nil && ctx.Err() == context.DeadlineExceeded:
+	case ctx != nil && (ctx.Err() == context.DeadlineExceeded || ctx.Err() ==context.Canceled):
 		err = ErrJobTimeout
 	case exitCode < 0:
 		err = fmt.Errorf("%w %d", ErrInvalidNegativeExitCode, exitCode)
-		_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
+		//_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
 	case exitCode != 0:
 		err = fmt.Errorf("exit code '%d'", exitCode)
-		_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
+		//_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
 	case err == nil && ok:
 		if ws.Signaled() {
 			signal := ws.Signal()

@@ -671,7 +671,7 @@ func (j *Job) runcmd(ctx context.Context) error {
 		err = ErrJobCancelled
 	case j.Status == JOB_STATUS_TIMEOUT:
 		err = ErrJobTimeout
-	case ctx != nil && (ctx.Err() == context.DeadlineExceeded || ctx.Err() ==context.Canceled):
+	case ctx != nil && (ctx.Err() == context.DeadlineExceeded || ctx.Err() == context.Canceled):
 		err = ErrJobTimeout
 	case exitCode < 0:
 		err = fmt.Errorf("%w %d", ErrInvalidNegativeExitCode, exitCode)

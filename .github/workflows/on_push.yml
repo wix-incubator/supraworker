@@ -26,7 +26,6 @@ jobs:
         uses: actions/setup-go@v1
         with:
           go-version: ${{ matrix.go }}
-
       - name: Cache packages
         uses: actions/cache@v2
         with:
@@ -39,15 +38,13 @@ jobs:
       - name: Test
         env:
         run: go test -bench=  -race -test.v -coverprofile=coverage.out -covermode=atomic ./...
-#      - name: Upload coverage to Codecov
-#        uses: codecov/codecov-action@v1
-#        with:
-#          token: ${{ secrets.CODECOV_TOKEN }}
-#          file: ./tests/coverage.xml
-#          files: ./tests/coverage1.xml,./tests/coverage2.xml
-#          directory: ./tests/coverage/reports/
-#          flags: unittests
-#          env_vars: OS,PYTHON
-#          name: codecov-umbrella
-#          fail_ci_if_error: true
-#          verbose: true
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v2
+        with:
+          #token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.out
+          directory: ./
+          env_vars: OS,PYTHON
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true

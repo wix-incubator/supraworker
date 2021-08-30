@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         go-version: [1.15.x]
-        os: [macos-latest, windows-latest]
+        os: [linux-latest]
     name: lint
     runs-on: ${{ matrix.os }}
     steps:

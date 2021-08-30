@@ -40,7 +40,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-${{ matrix.go }}-
       - name: Test
-        env:
         run: go test -bench=  -race -test.v -coverprofile=coverage.out -covermode=atomic ./...
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2

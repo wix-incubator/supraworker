@@ -1,7 +1,6 @@
 # Supraworker - Pull Jobs from Anywhere
 [![Build Status](https://travis-ci.org/weldpua2008/supraworker.svg?branch=master)](https://travis-ci.org/weldpua2008/supraworker) ![GitHub All Releases](https://img.shields.io/github/downloads/weldpua2008/supraworker/total) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Go Report Card](https://goreportcard.com/badge/github.com/weldpua2008/supraworker)](https://goreportcard.com/report/github.com/weldpua2008/supraworker) [![Docker Pulls](https://img.shields.io/docker/pulls/weldpua2008/supraworker)](https://hub.docker.com/r/weldpua2008/supraworker) ![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/weldpua2008/supraworker?label=docker%20image)
-
-<img src="./images/logo.svg" alt="drawing" style="width:20px;">
+![logo](./images/logo.svg)
 The abstraction layer around jobs, allows pull a job from any API, call-back your API, observe execution time and to control concurrent execution.
 
 It's responsible for pulling the commands(jobs) from your API, running commands, and streaming the logs back to your API. 

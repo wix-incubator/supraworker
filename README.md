@@ -1,5 +1,5 @@
 # Supraworker - Pull Jobs from Anywhere
-[![Build Status](https://travis-ci.org/weldpua2008/supraworker.svg?branch=master)](https://travis-ci.org/weldpua2008/supraworker) ![GitHub All Releases](https://img.shields.io/github/downloads/weldpua2008/supraworker/total) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Go Report Card](https://goreportcard.com/badge/github.com/weldpua2008/supraworker)](https://goreportcard.com/report/github.com/weldpua2008/supraworker) [![Docker Pulls](https://img.shields.io/docker/pulls/weldpua2008/supraworker)](https://hub.docker.com/r/weldpua2008/supraworker) ![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/weldpua2008/supraworker?label=docker%20image)
+[![Build Status](https://travis-ci.org/wix/supraworker.svg?branch=master)](https://travis-ci.org/wix/supraworker) ![GitHub All Releases](https://img.shields.io/github/downloads/wix/supraworker/total) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Go Report Card](https://goreportcard.com/badge/github.com/wix/supraworker)](https://goreportcard.com/report/github.com/wix/supraworker) [![Docker Pulls](https://img.shields.io/docker/pulls/wix/supraworker)](https://hub.docker.com/r/wix/supraworker) ![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/wix/supraworker?label=docker%20image)
 
 The abstraction layer around jobs, allows pull a job from any API, call-back your API, observe execution time and to control concurrent execution.
 
@@ -21,18 +21,28 @@ Prerequisite:
 #### Binary installation 
 Homebrew is a free and open-source package management system for Mac OS X.
 ```bash
- brew tap weldpua2008/tap
- brew install weldpua2008/tap/supraworker
+ brew tap wix/tap
 ```
+if you are using ssh than
+```shell
+brew tap wix/tap  git@github.com:wix/homebrew-brew.git
+```
+
+```shell
+brew update
+brew install wix/tap/supraworker
+```
+
+
 To update to the latest, run
 ```bash
-brew upgrade weldpua2008/tap/supraworker
+brew upgrade wix/tap/supraworker
 ```
 
 #### Installation from source code
 
 * Find the version you wish to install on the [GitHub Releases
-page](https://github.com/weldpua2008/supraworker/releases) and download either the
+page](https://github.com/wix/supraworker/releases) and download either the
 `darwin-amd64` binary for MacOS or the `linux-amd64` binary for Linux. No other
 operating systems or architectures have pre-built binaries at this time.
 
@@ -48,7 +58,7 @@ $ ~/Downloads/supraworker_darwin_amd64/supraworker
 ### Linux
 #### Download the latest release
 ```bash
-curl --silent -L  "https://api.github.com/repos/weldpua2008/supraworker/releases/latest"  \
+curl --silent -L  "https://api.github.com/repos/wix/supraworker/releases/latest"  \
 | jq --arg PLATFORM_ARCH "$(echo `uname -s`_amd| tr '[:upper:]' '[:lower:]')" -r '.assets[] | select(.name | contains($PLATFORM_ARCH)).browser_download_url' \
 | xargs -I % curl -sSL  % \
 | sudo tar --strip-components=1  -xzf  -
@@ -56,9 +66,9 @@ curl --silent -L  "https://api.github.com/repos/weldpua2008/supraworker/releases
 #### Installing from source
 1. install [Go](http://golang.org) `v1.13+`
 1. clone this down into your `$GOPATH`
-* `mkdir -p $GOPATH/src/github.com/weldpua2008`
-* `git clone https://github.com/weldpua2008/supraworker $GOPATH/src/github.com/weldpua2008/supraworker`
-* `cd $GOPATH/src/github.com/weldpua2008/supraworker`
+* `mkdir -p $GOPATH/src/github.com/wix`
+* `git clone https://github.com/wix/supraworker $GOPATH/src/github.com/wix/supraworker`
+* `cd $GOPATH/src/github.com/wix/supraworker`
 1. install [golangci-lint](https://github.com/golangci/golangci-lint#install) for linting + static analysis
 * Lint: `docker run --rm -v $(pwd):/app -w /app golangci/golangci-lint:v1.24.0 golangci-lint run -v`
 

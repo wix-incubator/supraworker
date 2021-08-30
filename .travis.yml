@@ -24,12 +24,12 @@ script:
 before_deploy:
   # Set up git user name and tag this commit
   - git config --local user.name "Valeriy Soloviov"
-  - git config --local user.email "weldpua2008@gmail.com"
+  - git config --local user.email "wix@gmail.com"
   - export TRAVIS_TAG=${TRAVIS_TAG:-$(date +'%Y%m%d%H%M%S')-$(git log --format=%h -1)}
   - git tag $TRAVIS_TAG || true
 
   - go get github.com/laher/goxc
-  - goxc -tasks 'xc archive' -bc 'darwin linux' -d "$RELEASES_PATH" -resources-include 'README*' -build-ldflags="-X github.com/weldpua2008/supraworker/cmd.GitCommit=${TRAVIS_TAG} "
+  - goxc -tasks 'xc archive' -bc 'darwin linux' -d "$RELEASES_PATH" -resources-include 'README*' -build-ldflags="-X github.com/wix/supraworker/cmd.GitCommit=${TRAVIS_TAG} "
 
 deploy:
   skip_cleanup: true
@@ -45,6 +45,6 @@ deploy:
     - $RELEASES_PATH/snapshot/supraworker_linux_arm.tar.gz
 
   on:
-    repo: weldpua2008/supraworker
+    repo: wix/supraworker
     tags: true
     draft: true

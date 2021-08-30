@@ -3,8 +3,8 @@ package communicator
 import (
 	"context"
 	"fmt"
-	config "github.com/weldpua2008/supraworker/config"
-	utils "github.com/weldpua2008/supraworker/utils"
+	"github.com/wix/supraworker/config"
+	"github.com/wix/supraworker/utils"
 
 	"strings"
 )

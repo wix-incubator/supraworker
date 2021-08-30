@@ -1,6 +1,6 @@
 FROM golang:1.15-alpine AS build-env
 
-WORKDIR /go/src/github.com/weldpua2008/supraworker
+WORKDIR /go/src/github.com/wix/supraworker
 
 COPY . .
 
@@ -13,7 +13,7 @@ RUN go get -d -v ./... && \
     go install -v ./... && \
     export GIT_COMMIT_LOACAL=$(git log -1 --format=%H) && \
     export GIT_COMMIT=${GIT_COMMIT:-$GIT_COMMIT_LOACAL} && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /root/supraworker -ldflags="-X github.com/weldpua2008/supraworker/cmd.GitCommit=${GIT_COMMIT}" main.go
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /root/supraworker -ldflags="-X github.com/wix/supraworker/cmd.GitCommit=${GIT_COMMIT}" main.go
 
 FROM alpine:latest
 
@@ -31,12 +31,12 @@ LABEL \
     org.opencontainers.image.authors="Valeriy Soloviov" \
     org.opencontainers.image.created=$IMAGE_CREATED \
     org.opencontainers.image.description="The abstraction layer around jobs, allows pull a job from your API periodically, call-back your API, observe execution time and to control concurrent execution." \
-    org.opencontainers.image.documentation="https://github.com/weldpua2008/supraworker/" \
+    org.opencontainers.image.documentation="https://github.com/wix/supraworker/" \
     org.opencontainers.image.licenses="Apache License 2.0" \
     org.opencontainers.image.revision=$IMAGE_REVISION \
-    org.opencontainers.image.source="https://github.com/weldpua2008/supraworker/" \
+    org.opencontainers.image.source="https://github.com/wix/supraworker/" \
     org.opencontainers.image.title="Supraworker" \
-    org.opencontainers.image.url="https://github.com/weldpua2008/supraworker/" \
+    org.opencontainers.image.url="https://github.com/wix/supraworker/" \
     org.opencontainers.image.vendor="Supraworker" \
     org.opencontainers.image.version=$IMAGE_VERSION
 

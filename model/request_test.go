@@ -2,7 +2,7 @@ package model
 
 import (
 	"fmt"
-	"github.com/weldpua2008/supraworker/config"
+	"github.com/wix/supraworker/config"
 	"testing"
 )
 

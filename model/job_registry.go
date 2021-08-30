@@ -2,7 +2,7 @@ package model
 
 import (
 	"fmt"
-	"github.com/weldpua2008/supraworker/utils"
+	"github.com/wix/supraworker/utils"
 	"runtime"
 	"sync"
 	"time"

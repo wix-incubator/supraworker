@@ -1,6 +1,6 @@
 # Supraworker - Pull Jobs from Anywhere
 ![GitHub All Releases](https://img.shields.io/github/downloads/wix/supraworker/total) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Go Report Card](https://goreportcard.com/badge/github.com/wix/supraworker)](https://goreportcard.com/report/github.com/wix/supraworker)
-![](./images/logo.png =100x100)
+<img src="./images/logo.png" data-canonical-src="./images/logo.png" width="38" height="38" />
 
 The abstraction layer around jobs, allows pull a job from any API, call-back your API, observe execution time and to control concurrent execution.
 

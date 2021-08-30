@@ -1,7 +1,9 @@
 name: Code style and test
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - master
     paths-ignore:
       - docker-image/*
       - CHANGELOG.md
@@ -11,7 +13,9 @@ on:
       - .github/ISSUE_TEMPLATE/*
       - .gitignore
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+      - master
 jobs:
   unit-tests:
     name: "Code style and unit tests on ${{ matrix.go }}"
@@ -36,7 +40,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-${{ matrix.go }}-
       - name: Test
-        env:
         run: go test -bench=  -race -test.v -coverprofile=coverage.out -covermode=atomic ./...
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2

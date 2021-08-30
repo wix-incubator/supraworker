@@ -53,7 +53,7 @@ var (
 	NumWorkers int
 	// C defines main configuration structure.
 	C = Config{
-		CallAPIDelaySec: int(2),
+		CallAPIDelaySec: 2,
 		NumActiveJobs:   0,
 		NumFreeSlots:    0,
 		NumWorkers:      0,

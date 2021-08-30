@@ -96,10 +96,7 @@ func (j *Job) PutInTerminal() {
 
 // IsTerminal returns true in case job entered final state
 func (j *Job) IsTerminal() bool {
-	if atomic.LoadInt32(&(j.inTerminalState)) != 0 {
-		return true
-	}
-	return false
+	return atomic.LoadInt32(&(j.inTerminalState)) != 0
 }
 
 // StoreKey returns StoreKey

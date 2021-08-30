@@ -3,9 +3,9 @@ package job
 import (
 	"context"
 	"fmt"
-	"github.com/weldpua2008/supraworker/config"
-	"github.com/weldpua2008/supraworker/metrics"
-	"github.com/weldpua2008/supraworker/model"
+	"github.com/wix/supraworker/config"
+	"github.com/wix/supraworker/metrics"
+	"github.com/wix/supraworker/model"
 	"strconv"
 	"strings"
 	"time"

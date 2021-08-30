@@ -3,7 +3,7 @@ package communicator
 import (
 	"context"
 	"errors"
-	config "github.com/weldpua2008/supraworker/config"
+	"github.com/wix/supraworker/config"
 	"strings"
 	"testing"
 )

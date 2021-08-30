@@ -3,9 +3,9 @@ package heartbeat
 import (
 	"context"
 	"fmt"
-	"github.com/weldpua2008/supraworker/communicator"
-	"github.com/weldpua2008/supraworker/config"
-	"github.com/weldpua2008/supraworker/worker"
+	"github.com/wix/supraworker/communicator"
+	"github.com/wix/supraworker/config"
+	"github.com/wix/supraworker/worker"
 	"sync/atomic"
 	"time"
 )

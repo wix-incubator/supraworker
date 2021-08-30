@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/weldpua2008/supraworker/communicator"
+	"github.com/wix/supraworker/communicator"
 	"net"
 
 	// "github.com/sirupsen/logrus"
@@ -17,7 +17,7 @@ import (
 	"time"
 	// "runtime"
 
-	config "github.com/weldpua2008/supraworker/config"
+	config "github.com/wix/supraworker/config"
 )
 
 // GetAPIParamsFromSection of the configuration

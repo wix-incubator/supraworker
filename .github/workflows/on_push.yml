@@ -1,0 +1,50 @@
+name: Code style and test
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - docker-image/*
+      - CHANGELOG.md
+      - README.md
+      - CONTRIBUTING.md
+      - .github/workflows/on_release.yml
+      - .github/ISSUE_TEMPLATE/*
+      - .gitignore
+  pull_request:
+    branches: [ main ]
+jobs:
+  unit-tests:
+    name: "Code style and unit tests on ${{ matrix.go }}"
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 2
+      matrix:
+        go: [ '1.15', '1.16' ]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup go
+        uses: actions/setup-go@v1
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Cache packages
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ matrix.go }}-
+      - name: Test
+        env:
+        run: go test -bench=  -race -test.v -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v2
+        with:
+          #token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.out
+          directory: ./
+          env_vars: OS,PYTHON
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true

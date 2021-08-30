@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	config "github.com/weldpua2008/supraworker/config"
-	utils "github.com/weldpua2008/supraworker/utils"
+	config "github.com/wix/supraworker/config"
+	utils "github.com/wix/supraworker/utils"
 )
 
 func init() {

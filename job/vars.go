@@ -2,7 +2,7 @@ package job
 
 import (
 	"github.com/sirupsen/logrus"
-	"github.com/weldpua2008/supraworker/model"
+	"github.com/wix/supraworker/model"
 )
 
 var (

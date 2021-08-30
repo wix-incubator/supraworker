@@ -3,7 +3,7 @@ ARG BASE_TAG=latest
 
 FROM ${BASE_IMAGE}:${BASE_TAG} AS build-env
 
-WORKDIR /go/src/github.com/weldpua2008/supraworker
+WORKDIR /go/src/github.com/wix/supraworker
 RUN apk --no-cache add build-base git mercurial gcc
 
 COPY . .

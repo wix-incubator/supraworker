@@ -1,7 +1,7 @@
 package communicator
 
 import (
-	config "github.com/weldpua2008/supraworker/config"
+	config "github.com/wix/supraworker/config"
 
 	"errors"
 	"go.uber.org/goleak"

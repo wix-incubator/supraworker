@@ -7,10 +7,10 @@ import (
 	"sync"
 	"testing"
 	"time"
-	// "github.com/weldpua2008/supraworker/job"
+	// "github.com/wix/supraworker/job"
 	"github.com/sirupsen/logrus"
-	model "github.com/weldpua2008/supraworker/model"
-	"github.com/weldpua2008/supraworker/model/cmdtest"
+	model "github.com/wix/supraworker/model"
+	"github.com/wix/supraworker/model/cmdtest"
 	"go.uber.org/goleak"
 )
 

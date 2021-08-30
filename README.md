@@ -1,5 +1,5 @@
 # Supraworker - Pull Jobs from Anywhere
-[![Build Status](https://travis-ci.org/wix/supraworker.svg?branch=master)](https://travis-ci.org/wix/supraworker) ![GitHub All Releases](https://img.shields.io/github/downloads/wix/supraworker/total) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Go Report Card](https://goreportcard.com/badge/github.com/wix/supraworker)](https://goreportcard.com/report/github.com/wix/supraworker) [![Docker Pulls](https://img.shields.io/docker/pulls/wix/supraworker)](https://hub.docker.com/r/wix/supraworker) ![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/wix/supraworker?label=docker%20image)
+![GitHub All Releases](https://img.shields.io/github/downloads/wix/supraworker/total) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Go Report Card](https://goreportcard.com/badge/github.com/wix/supraworker)](https://goreportcard.com/report/github.com/wix/supraworker)
 
 The abstraction layer around jobs, allows pull a job from any API, call-back your API, observe execution time and to control concurrent execution.
 

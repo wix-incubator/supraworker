@@ -1,4 +1,4 @@
-// Copyright 2020 Valeriy Soloviov. All rights reserved.
+// Copyright 2020 The Supraworker Authors. All rights reserved.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // license that can be found in the LICENSE file.
 

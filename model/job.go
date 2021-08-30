@@ -74,13 +74,13 @@ type Job struct {
 	// params got from your API
 	RawParams []map[string]interface{}
 	// stream interface
-	elements          uint
+	elements          uint64
 	notify            chan interface{}
 	notifyStopStreams chan interface{}
 	notifyLogSent     chan interface{}
 	streamsMu         sync.Mutex
-	counter           uint
-	timeQuote         bool
+	counter           uint64
+	timeQuote         uint32
 	// If we should use shell and wrap the command
 	UseSHELL   bool
 	streamsBuf []string
@@ -370,40 +370,43 @@ func (j *Job) TimeoutWithCancel(duration time.Duration) error {
 //  - high volume log producers - after j.elements
 //	- after buffer is full
 //	- after slow log interval
+// TODO: try to use channel
 func (j *Job) AppendLogStream(logStream []string) (err error) {
 	if j.quotaHit() {
-		<-j.notify
-		//select {
-		//case <-j.notify:
-		//case <-time.After(600 * time.Second):
-		//	j.GetLogger().Warningf("Timeout AppendLogStream")
-		//}
+		//<-j.notify
+		select {
+		case <-j.notify:
+		case <-time.After(config.TimeoutAppendLogStreams):
+			j.GetLogger().Warningf("Timeout AppendLogStream after %v", config.TimeoutAppendLogStreams)
+		}
 		err = j.doSendSteamBuf()
 	}
 	j.incrementCounter()
-	j.streamsMu.Lock()
-	defer j.streamsMu.Unlock()
-	j.streamsBuf = append(j.streamsBuf, logStream...)
-
+	if len(logStream) > 0 {
+		j.streamsMu.Lock()
+		defer j.streamsMu.Unlock()
+		j.streamsBuf = append(j.streamsBuf, logStream...)
+	}
 	return err
 }
 
 // count next element
 func (j *Job) incrementCounter() {
-	j.streamsMu.Lock()
-	defer j.streamsMu.Unlock()
-	j.counter++
+	atomic.AddUint64(&j.counter, 1)
 }
 
 // Checks quota for the buffer
 // True - need to send
 // False - can wait
 func (j *Job) quotaHit() bool {
-	return (j.counter >= j.elements) || (len(j.streamsBuf) > int(j.elements)) || (j.timeQuote)
+	return (atomic.LoadUint64(&j.counter) >= j.elements) || (len(j.streamsBuf) > int(j.elements)) || (atomic.LoadUint32(&j.timeQuote) == 1)
 }
 
 // Flushes buffer state and resets state of counters.
 func (j *Job) resetCounterLoop(ctx context.Context, after time.Duration) {
+	if after.Milliseconds() < 1 {
+		after = 100 * time.Millisecond
+	}
 	ticker := time.NewTicker(after)
 	tickerTimeInterval := time.NewTicker(2 * after)
 	tickerSlowLogsInterval := time.NewTicker(10 * after)
@@ -424,14 +427,14 @@ func (j *Job) resetCounterLoop(ctx context.Context, after time.Duration) {
 		case <-ticker.C:
 			j.streamsMu.Lock()
 			if j.quotaHit() {
-				j.timeQuote = false
+				atomic.StoreUint32(&j.timeQuote, 0)
 				j.doNotify()
 			}
-			j.counter = 0
+			atomic.StoreUint64(&j.counter, 0)
 			j.streamsMu.Unlock()
 		case <-tickerTimeInterval.C:
 			j.streamsMu.Lock()
-			j.timeQuote = true
+			atomic.StoreUint32(&j.timeQuote, 1)
 			j.streamsMu.Unlock()
 		// flush Buffer for slow logs
 		case <-tickerSlowLogsInterval.C:
@@ -453,7 +456,7 @@ func (j *Job) FlushSteamsBuffer() error {
 	return j.doSendSteamBuf()
 }
 
-// doSendSteamBuf low-level functions which sends streams to the remote API
+// doSendSteamBuf low-level function streams to the remote API
 // Send stream only if there is something
 func (j *Job) doSendSteamBuf() error {
 	j.streamsMu.Lock()
@@ -671,14 +674,14 @@ func (j *Job) runcmd(ctx context.Context) error {
 		err = ErrJobCancelled
 	case j.Status == JOB_STATUS_TIMEOUT:
 		err = ErrJobTimeout
-	case ctx != nil && ctx.Err() == context.DeadlineExceeded:
+	case ctx != nil && (ctx.Err() == context.DeadlineExceeded || ctx.Err() == context.Canceled):
 		err = ErrJobTimeout
 	case exitCode < 0:
 		err = fmt.Errorf("%w %d", ErrInvalidNegativeExitCode, exitCode)
-		_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
+		//_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
 	case exitCode != 0:
 		err = fmt.Errorf("exit code '%d'", exitCode)
-		_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
+		//_ = j.AppendLogStream([]string{fmt.Sprintf("%s\n", err)})
 	case err == nil && ok:
 		if ws.Signaled() {
 			signal := ws.Signal()

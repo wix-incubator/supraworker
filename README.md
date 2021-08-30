@@ -3,51 +3,76 @@
 
 The abstraction layer around jobs, allows pull a job from any API, call-back your API, observe execution time and to control concurrent execution.
 
-It's responsible for getting the commands from your API, running commands, and streaming the logs back to your API. It also sends state updates to your API.
-### Use Cases
-* Airflow sends task for an execution on AWS EMR
-* Building your CI/CD system   
-
+It's responsible for pulling the commands(jobs) from your API, running commands, and streaming the logs back to your API. 
+It also sends state updates to remote API.
 
 ## Getting started
 
-Find the version you wish to install on the [GitHub Releases
-page](https://github.com/weldpua2008/supraworker/releases) and download either the
-`darwin-amd64` binary for MacOS or the `linux-amd64` binary for Linux. No other
-operating systems or architectures have pre-built binaries at this time.
+Prerequisite:
+1. API service that serve jobs:
+    * You can check the simple implantation of the [API service written ib Python](docker-image/apiserver/app/app.py)
+2. Supraworker configuration:
+    * You can check [the configuration](tests/supraworker/supraworker.yml) for the [above API service written ib Python](docker-image/apiserver/app/app.py)  
+3. Running supraworker on a server 
 
->[!WARNING] Running releasses on MacOs:
-> You need to download file, extract it and remove attributes with
-> the following command (where /Users/weldpua2008/Downloads/supraworker_darwin_amd64/supraworker is path to the file)
-```bash
-$ xattr -d com.apple.quarantine /Users/weldpua2008/Downloads/supraworker_darwin_amd64/supraworker
-$ /Users/weldpua2008/Downloads/supraworker_darwin_amd64/supraworker
-```
+## Installation 
+### MacOs X
 
-* MacOs X
+#### Binary installation 
 Homebrew is a free and open-source package management system for Mac OS X.
-
 ```bash
  brew tap weldpua2008/tap
  brew install weldpua2008/tap/supraworker
 ```
-
 To update to the latest, run
-
 ```bash
 brew upgrade weldpua2008/tap/supraworker
 ```
 
-### Configuring
+#### Installation from source code
 
+* Find the version you wish to install on the [GitHub Releases
+page](https://github.com/weldpua2008/supraworker/releases) and download either the
+`darwin-amd64` binary for MacOS or the `linux-amd64` binary for Linux. No other
+operating systems or architectures have pre-built binaries at this time.
+
+> **_NOTE:_** Running releasses on MacOs:
+> You need to download file, extract it and remove attributes with
+> the following command (where ~/Downloads/supraworker_darwin_amd64/supraworker is Path to the file)
+
+```bash
+$ xattr -d com.apple.quarantine ~/Downloads/supraworker_darwin_amd64/supraworker
+$ ~/Downloads/supraworker_darwin_amd64/supraworker
+```
+
+### Linux
+#### Download the latest release
+```bash
+curl --silent -L  "https://api.github.com/repos/weldpua2008/supraworker/releases/latest"  \
+| jq --arg PLATFORM_ARCH "$(echo `uname -s`_amd| tr '[:upper:]' '[:lower:]')" -r '.assets[] | select(.name | contains($PLATFORM_ARCH)).browser_download_url' \
+| xargs -I % curl -sSL  % \
+| sudo tar --strip-components=1  -xzf  -
+```
+#### Installing from source
+1. install [Go](http://golang.org) `v1.13+`
+1. clone this down into your `$GOPATH`
+* `mkdir -p $GOPATH/src/github.com/weldpua2008`
+* `git clone https://github.com/weldpua2008/supraworker $GOPATH/src/github.com/weldpua2008/supraworker`
+* `cd $GOPATH/src/github.com/weldpua2008/supraworker`
+1. install [golangci-lint](https://github.com/golangci/golangci-lint#install) for linting + static analysis
+* Lint: `docker run --rm -v $(pwd):/app -w /app golangci/golangci-lint:v1.24.0 golangci-lint run -v`
+
+
+### Configuration
 Define config at `$HOME/supraworker.yaml`:
 
->[!WARNING] Keys are not case sensitivity (https://github.com/spf13/viper/pull/635#issuecomment-580659676):
-> Viper's default behaviour of lowercasing the keys for key insensitivity is incompatible
-> with these standards and has the side effect of making it difficult for
-> use cases such as case sensitive API credentials in configuration.
-> For eg: MyApiKey=MySecret
-
+---
+> **_NOTE:_** Keys are not case sensitivity (https://github.com/spf13/viper/pull/635#issuecomment-580659676):
+Viper's default behaviour of lowercasing the keys for key insensitivity is incompatible
+with these standards and has the side effect of making it difficult for
+use cases such as case sensitive API credentials in configuration.
+For eg: MyApiKey=MySecret
+---
 
 ```yaml
 # ClientId in case you need to identify the worker
@@ -63,31 +88,12 @@ jobs:
       "Content-type": "application/json"
       params:
         "clientid": "{{ .ClientId}}"
-
 ```
+## Use Cases
+* Airflow sends task for an execution on AWS EMR
+* Building your CI/CD system
 
-
-## Installing
-
-### Download automation
-* Download for Linux latest release
-```bash
-curl --silent -L  "https://api.github.com/repos/weldpua2008/supraworker/releases/latest"  \
-| jq --arg PLATFORM_ARCH "$(echo `uname -s`_amd| tr '[:upper:]' '[:lower:]')" -r '.assets[] | select(.name | contains($PLATFORM_ARCH)).browser_download_url' \
-| xargs -I % curl -sSL  % \
-| sudo tar --strip-components=1  -xzf  -
-```
-
-### Installing from source
-
-1. install [Go](http://golang.org) `v1.13+`
-1. clone this down into your `$GOPATH`
-  * `mkdir -p $GOPATH/src/github.com/weldpua2008`
-  * `git clone https://github.com/weldpua2008/supraworker $GOPATH/src/github.com/weldpua2008/supraworker`
-  * `cd $GOPATH/src/github.com/weldpua2008/supraworker`
-1. install [golangci-lint](https://github.com/golangci/golangci-lint#install) for linting + static analysis
-  * Lint: `docker run --rm -v $(pwd):/app -w /app golangci/golangci-lint:v1.24.0 golangci-lint run -v`
-### Running tests
+## Running tests
 
 *  expires all test results
 

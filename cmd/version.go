@@ -1,4 +1,4 @@
-// Copyright 2020 Valeriy Soloviov. All rights reserved.
+// Copyright 2020 The Supraworker Authors. All rights reserved.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // license that can be found in the LICENSE file.
 
@@ -22,7 +22,7 @@ var GitCommit string
 
 const (
 	// Version defines main version number
-	Version = "0.4.4"
+	Version = "0.4.5"
 
 	// VersionPrerelease is pre-release marker for the version
 	// such as "dev" (in development), "beta", "rc1", etc.

@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"github.com/mitchellh/go-ps"
 	"github.com/sirupsen/logrus"
-	"github.com/weldpua2008/supraworker/config"
-	"github.com/weldpua2008/supraworker/utils"
+	"github.com/wix/supraworker/config"
+	"github.com/wix/supraworker/utils"
 	"io"
 	"io/ioutil"
 	"os/exec"
@@ -96,10 +96,7 @@ func (j *Job) PutInTerminal() {
 
 // IsTerminal returns true in case job entered final state
 func (j *Job) IsTerminal() bool {
-	if atomic.LoadInt32(&(j.inTerminalState)) != 0 {
-		return true
-	}
-	return false
+	return atomic.LoadInt32(&(j.inTerminalState)) != 0
 }
 
 // StoreKey returns StoreKey

@@ -6,7 +6,7 @@
 # Docker
 # yum install -y docker
 # service docker start
-# git clone https://github.com/weldpua2008/supraworker.git
+# git clone https://github.com/wix/supraworker.git
 # cd supraworker
 #
 cd "$(dirname "$0}")" || exit 1

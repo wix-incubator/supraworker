@@ -1,4 +1,4 @@
-module github.com/weldpua2008/supraworker
+module github.com/wix/supraworker
 
 go 1.15
 

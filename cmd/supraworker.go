@@ -13,13 +13,12 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	// communicator "github.com/weldpua2008/supraworker/communicator"
-	config "github.com/weldpua2008/supraworker/config"
-	heartbeat "github.com/weldpua2008/supraworker/heartbeat"
-	job "github.com/weldpua2008/supraworker/job"
-	metrics "github.com/weldpua2008/supraworker/metrics"
-	model "github.com/weldpua2008/supraworker/model"
-	worker "github.com/weldpua2008/supraworker/worker"
+	config "github.com/wix/supraworker/config"
+	heartbeat "github.com/wix/supraworker/heartbeat"
+	job "github.com/wix/supraworker/job"
+	metrics "github.com/wix/supraworker/metrics"
+	model "github.com/wix/supraworker/model"
+	worker "github.com/wix/supraworker/worker"
 	"os"
 	"os/signal"
 	"sync"
@@ -63,8 +62,8 @@ var rootCmd = &cobra.Command{
 	Use:   "supraworker",
 	Short: "Supraworker is abstraction layer around jobs",
 	Long: `A Fast and Flexible Abstraction around jobs built with
-                love by weldpua2008 and friends in Go.
-                Complete documentation is available at github.com/weldpua2008/supraworker/cmd`,
+                love by wix and friends in Go.
+                Complete documentation is available at github.com/wix/supraworker/cmd`,
 	Version: FormattedVersion(),
 	Run: func(cmd *cobra.Command, args []string) {
 		stopChan := make(chan os.Signal, 1)

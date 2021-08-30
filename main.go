@@ -7,7 +7,7 @@
 package main
 
 import (
-	"github.com/weldpua2008/supraworker/cmd"
+	"github.com/wix/supraworker/cmd"
 	"log"
 )
 

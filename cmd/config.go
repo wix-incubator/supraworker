@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	config "github.com/weldpua2008/supraworker/config"
+	"github.com/wix/supraworker/config"
 )
 
 // Init Supraworker

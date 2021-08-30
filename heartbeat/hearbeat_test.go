@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/spf13/viper"
-	config "github.com/weldpua2008/supraworker/config"
+	config "github.com/wix/supraworker/config"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"

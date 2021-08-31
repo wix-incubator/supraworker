@@ -1,4 +1,13 @@
-# <img src="./images/logo-white.png" data-canonical-src="./images/logo-white.png" width="80px" height="80px" style="background-color: black;" /> Supraworker - Pull Jobs from Anywhere
+<p align="center">
+	<img alt="Supraworker" width=380 src="./images/logo.png"/ data-canonical-src="./images/logo-white.png">
+</p>
+<h1 align="center">
+  Supraworker
+</h1>
+<p align="center">
+<b>Pull Jobs from Anywhere</b>
+</p>
+
 ![GitHub All Releases](https://img.shields.io/github/downloads/wix/supraworker/total) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Go Report Card](https://goreportcard.com/badge/github.com/wix/supraworker)](https://goreportcard.com/report/github.com/wix/supraworker)
 
 

@@ -178,7 +178,15 @@ func StartGenerateJobs(ctx context.Context, jobs chan *model.Job, interval time.
 							j += 1
 							log.Tracef("sent job id %v ", job.Id)
 						} else {
-							log.Trace(fmt.Sprintf("Duplicated job id %v ", job.Id))
+							log.Warn(fmt.Sprintf("Duplicated job id %v ", job.Id))
+							log.Warn(fmt.Sprintf("New job %v ", job))
+
+							if existingJob, ok := JobsRegistry.Record(job.StoreKey()); ok {
+								log.Warn(fmt.Sprintf("Existing job %v ", existingJob))
+							} else {
+								log.Warn(fmt.Sprintf("Existing job not found, id =  %v ", job.StoreKey()))
+							}
+
 							metrics.JobsFetchDuplicates.Inc()
 						}
 					}
